@@ -18,17 +18,39 @@ const KNOWN_TOKENS = [
   { symbol: 'JTO', mint: 'jtojtomepa8beP8AuQc6eP9fH63Kx5YxV5fJkFz7yTz' }
 ];
 
+const EVM_KNOWN_TOKENS: Record<string, string> = {
+  '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8': 'USDC',
+  '0xaf88d065e77c8cC2239327C5EDb3A432268e5831': 'USDC',
+  '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1': 'WETH',
+  '0x912CE59144191C1204E64559FE8253a0e49E6548': 'ARB',
+  '0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a': 'GMX',
+  '0x539bdE0d7Dbd336b79148AA742883198BBF60342': 'MAGIC',
+  '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f': 'WBTC',
+  '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9': 'USDT'
+};
+
+const getDisplaySymbol = (mint: string) => {
+  if (!mint) return '';
+  const solToken = KNOWN_TOKENS.find(t => t.mint === mint);
+  if (solToken) return solToken.symbol;
+  if (EVM_KNOWN_TOKENS[mint]) return EVM_KNOWN_TOKENS[mint];
+  return mint;
+};
+
 type Strategy = {
   _id: string;
   name: string;
+  network?: string;
+  contractAddress?: string;
+  tokenAMint: string;
   tokenBMint: string;
   tokenBSymbol?: string;
   borrowAmount: number;
   minProfitUsdc: number;
   provider: string;
   lendingProvider: string;
-  borrowApy: number;
   active: boolean;
+  mevProtection: boolean;
   walletId?: string;
 }
 
@@ -51,12 +73,15 @@ export default function FlashLoanPage() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [trades, setTrades] = useState<FlashLoanTrade[]>([]);
   const [name, setName] = useState('');
+  const [tokenAMint, setTokenAMint] = useState(KNOWN_TOKENS.find(t => t.symbol === 'USDC')?.mint || '');
   const [tokenBMint, setTokenBMint] = useState(KNOWN_TOKENS[0].mint);
   const [borrowAmount, setBorrowAmount] = useState('');
   const [minProfitUsdc, setMinProfitUsdc] = useState('0');
+  const [network, setNetwork] = useState('solana');
+  const [contractAddress, setContractAddress] = useState('');
   const [provider, setProvider] = useState('jupiter');
   const [lendingProvider, setLendingProvider] = useState('solend');
-  const [borrowApy, setBorrowApy] = useState('0.09');
+  const [mevProtection, setMevProtection] = useState(true);
   const [botOnline, setBotOnline] = useState<boolean>(false);
   const [botMode, setBotMode] = useState<'simulated' | 'live'>('simulated');
   const [connectionMode, setConnectionMode] = useState<'rpc' | 'wss'>('rpc');
@@ -120,7 +145,8 @@ export default function FlashLoanPage() {
     const interval = setInterval(() => {
       checkBotStatus();
       fetchTrades();
-    }, 15000);
+      fetchStrategies();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -180,12 +206,15 @@ export default function FlashLoanPage() {
     const res = await fetch('/api/strategies', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      body: JSON.stringify({ name, walletId: selectedWalletId, tokenBMint, tokenBSymbol: tokenObj?.symbol || 'UNKNOWN', borrowAmount: Number(borrowAmount), minProfitUsdc: Number(minProfitUsdc), provider, lendingProvider, borrowApy: Number(borrowApy) })
+      body: JSON.stringify({ name, walletId: selectedWalletId, network, contractAddress, tokenAMint, tokenBMint, tokenBSymbol: tokenObj?.symbol || 'UNKNOWN', borrowAmount: Number(borrowAmount), minProfitUsdc: Number(minProfitUsdc), provider, lendingProvider, mevProtection })
     });
     if (res.ok) {
-      setName(''); setTokenBMint(KNOWN_TOKENS[0].mint); setBorrowAmount(''); setMinProfitUsdc('0'); setLendingProvider('solend'); setBorrowApy('0.09');
+      setName(''); setTokenAMint(KNOWN_TOKENS.find(t => t.symbol === 'USDC')?.mint || ''); setTokenBMint(KNOWN_TOKENS[0].mint); setBorrowAmount(''); setMinProfitUsdc('0'); setLendingProvider(network === 'solana' ? 'solend' : 'aave'); setMevProtection(true); setContractAddress('');
       fetchStrategies();
       setIsFormOpen(false);
+    } else {
+      const data = await res.json();
+      alert(`Erro: ${data.error || 'Falha ao criar estratégia'}`);
     }
   };
 
@@ -200,17 +229,23 @@ export default function FlashLoanPage() {
         name: editingStrategy.name, 
         borrowAmount: editingStrategy.borrowAmount, 
         minProfitUsdc: editingStrategy.minProfitUsdc,
+        network: editingStrategy.network,
+        contractAddress: editingStrategy.contractAddress,
         provider: editingStrategy.provider,
         lendingProvider: editingStrategy.lendingProvider,
-        borrowApy: editingStrategy.borrowApy,
+        mevProtection: editingStrategy.mevProtection,
+        tokenAMint: editingStrategy.tokenAMint,
         tokenBMint: editingStrategy.tokenBMint,
-        tokenBSymbol: tokenObj?.symbol || 'UNKNOWN',
+        tokenBSymbol: tokenObj?.symbol || editingStrategy.tokenBSymbol || 'UNKNOWN',
         walletId: editingStrategy.walletId
       })
     });
     if (res.ok) {
       setEditingStrategy(null);
       fetchStrategies();
+    } else {
+      const data = await res.json();
+      alert(`Erro: ${data.error || 'Falha ao editar estratégia'}`);
     }
   };
 
@@ -334,7 +369,7 @@ export default function FlashLoanPage() {
           <div>
             <h4 className="text-red-400 font-bold mb-1">Bot Engine is Paused</h4>
             <p className="text-red-200/80 text-sm">
-              Your Flash Loan strategies are not running. To start scanning for arbitrage, please run the command <code className="bg-red-950/50 px-1.5 py-0.5 rounded text-red-300 font-mono">npm run bot</code> in your server terminal.
+              Your Flash Loan strategies are not running. To start scanning for arbitrage, please run the command <code className="bg-red-950/50 px-1.5 py-0.5 rounded text-red-300 font-mono">npm run start:monitor</code> in sua pasta flash-go no terminal.
             </p>
           </div>
         </div>
@@ -365,7 +400,7 @@ export default function FlashLoanPage() {
                 </h4>
                 <p className="text-xs text-slate-400 font-mono mt-1 flex items-center gap-2">
                   <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded text-[10px] font-bold">{strat.tokenBSymbol || 'UNKNOWN'}</span>
-                  {strat.tokenBMint.substring(0,6)}...{strat.tokenBMint.substring(strat.tokenBMint.length-6)}
+                  {strat.tokenBMint.includes(',') ? <span className="text-[10px]">Múltiplos Contratos</span> : `${strat.tokenBMint.substring(0,6)}...${strat.tokenBMint.substring(strat.tokenBMint.length-6)}`}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -380,21 +415,37 @@ export default function FlashLoanPage() {
               </div>
             </div>
             
-            <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
                 <p className="text-xs text-slate-500 mb-1">Borrow Size</p>
-                <p className="text-sm font-semibold text-emerald-400">${strat.borrowAmount.toLocaleString()} USDC</p>
+                <p className="text-sm font-semibold text-emerald-400">${strat.borrowAmount.toLocaleString()} {KNOWN_TOKENS.find(t => t.mint === strat.tokenAMint)?.symbol || 'USDC'}</p>
+              </div>
+              <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
+                <p className="text-xs text-slate-500 mb-1">Network</p>
+                <p className="text-sm font-semibold text-white capitalize">
+                  {strat.network || 'solana'}
+                </p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
                 <p className="text-xs text-slate-500 mb-1">Lending Prov.</p>
                 <p className="text-sm font-semibold text-indigo-400 capitalize">
-                  {strat.lendingProvider === 'kamino' ? 'Kamino' : strat.lendingProvider === 'none' ? 'Recursos Próprios' : 'Solend'} 
+                  {strat.lendingProvider === 'kamino' ? 'Kamino' : strat.lendingProvider === 'none' ? 'Recursos Próprios' : strat.lendingProvider} 
                 </p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
                 <p className="text-xs text-slate-500 mb-1">DEX Prov.</p>
                 <p className="text-sm font-semibold text-sky-400 capitalize">
                   {strat.provider}
+                </p>
+              </div>
+              <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
+                <p className="text-xs text-slate-500 mb-1">MEV Protection</p>
+                <p className="text-sm font-semibold text-white">
+                  {strat.mevProtection ? (
+                    <span className="text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3" /> {(strat.network || 'solana') === 'solana' ? 'Jito Active' : 'Flashbots Active'}</span>
+                  ) : (
+                    <span className="text-rose-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Disabled</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -410,19 +461,38 @@ export default function FlashLoanPage() {
         <form onSubmit={handleAdd} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <label className="block text-sm text-slate-400 mb-1">Network</label>
+              <select value={network} onChange={e => {
+                const newNet = e.target.value;
+                setNetwork(newNet);
+                setProvider(newNet === 'solana' ? 'jupiter' : 'uniswap');
+                setLendingProvider(newNet === 'solana' ? 'solend' : 'aave');
+              }} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
+                <option value="solana">Solana</option>
+                <option value="arbitrum">Arbitrum (EVM)</option>
+                <option value="polygon">Polygon (EVM)</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-sm text-slate-400 mb-1">Strategy Name</label>
               <input required value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" placeholder="e.g. USDC/SOL Arb" />
             </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">DEX Provider</label>
-              <select value={provider} onChange={e => setProvider(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-                <option value="jupiter">Jupiter (Default)</option>
-                <option value="raptor">Raptor API</option>
-              </select>
-            </div>
           </div>
-          
           <div className="grid grid-cols-2 gap-4">
+            {network === 'solana' ? (
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">DEX Provider</label>
+                <select value={provider} onChange={e => setProvider(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
+                  <option value="jupiter">Jupiter (Default)</option>
+                  <option value="raptor">Raptor API</option>
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">DEX Providers</label>
+                <input disabled value="Auto-Routing (All DEXes)" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2 text-slate-500 outline-none cursor-not-allowed" />
+              </div>
+            )}
             <div>
               <label className="block text-sm text-slate-400 mb-1">Execution Wallet</label>
               <select required value={selectedWalletId} onChange={e => setSelectedWalletId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
@@ -432,37 +502,69 @@ export default function FlashLoanPage() {
                 ))}
               </select>
             </div>
-            <div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
               <label className="block text-sm text-slate-400 mb-1">Lending Provider</label>
               <select value={lendingProvider} onChange={e => setLendingProvider(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-                <option value="solend">Solend (Main Pool)</option>
-                <option value="kamino">Kamino Finance (K-Lend)</option>
-                <option value="none">Recursos Próprios (Sem Flash Loan)</option>
+                {network === 'solana' ? (
+                  <>
+                    <option value="solend">Solend (Main Pool)</option>
+                    <option value="kamino">Kamino Finance (K-Lend)</option>
+                    <option value="none">Recursos Próprios (Sem Flash Loan)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="aave">Aave V3</option>
+                    <option value="balancer">Balancer FlashLoans</option>
+                  </>
+                )}
               </select>
             </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Borrow Fee % (APY)</label>
-              <input required type="number" step="0.01" value={borrowApy} onChange={e => setBorrowApy(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="0.09" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Target Arbitrage Token</label>
-            <select required value={tokenBMint} onChange={e => setTokenBMint(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-              {KNOWN_TOKENS.map(t => (
-                <option key={t.mint} value={t.mint}>{t.symbol} ({t.mint.substring(0, 4)}...{t.mint.substring(t.mint.length - 4)})</option>
-              ))}
-            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Borrow Amount (USDC)</label>
+              <label className="block text-sm text-slate-400 mb-1">Base Token (Symbol or Address)</label>
+              <input required value={tokenAMint} onChange={e => setTokenAMint(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="e.g. USDC or 0x..." />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Target Token (Symbol or Address)</label>
+              <input required value={tokenBMint} onChange={e => setTokenBMint(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="e.g. WETH or 0x..." />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Borrow Amount ({KNOWN_TOKENS.find(t => t.mint === tokenAMint)?.symbol || 'USDC'})</label>
               <input required type="number" value={borrowAmount} onChange={e => setBorrowAmount(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="100" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Min. Profit (USDC)</label>
+              <label className="block text-sm text-slate-400 mb-1">Min. Profit ({KNOWN_TOKENS.find(t => t.mint === tokenAMint)?.symbol || 'USDC'})</label>
               <input required type="number" step="0.01" value={minProfitUsdc} onChange={e => setMinProfitUsdc(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="0" />
+            </div>
+          </div>
+
+          <div className="bg-slate-950 border border-slate-800 p-4 rounded-lg flex items-start gap-4">
+            <div className="pt-1">
+              <input 
+                type="checkbox" 
+                id="mevProtection"
+                checked={mevProtection}
+                onChange={(e) => setMevProtection(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-700 rounded focus:ring-indigo-600 focus:ring-2"
+              />
+            </div>
+            <div>
+              <label htmlFor="mevProtection" className="block text-sm font-medium text-white mb-1 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-emerald-400" /> Private RPC / MEV Protection
+              </label>
+              <p className="text-xs text-slate-400">
+                Routes transactions through a private RPC (like Jito Block Engine). 
+                Protects against frontrunning and failed transaction gas fees. 
+                <span className="text-emerald-400 ml-1">Highly Recommended.</span>
+              </p>
             </div>
           </div>
 
@@ -561,9 +663,27 @@ export default function FlashLoanPage() {
               <Pencil className="w-5 h-5 text-indigo-500" /> Edit Strategy
             </h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Strategy Name</label>
-                <input value={editingStrategy.name} onChange={e => setEditingStrategy({...editingStrategy, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Network</label>
+                  <select value={editingStrategy.network || 'solana'} onChange={e => {
+                    const newNet = e.target.value;
+                    setEditingStrategy({
+                      ...editingStrategy, 
+                      network: newNet,
+                      provider: newNet === 'solana' ? 'jupiter' : 'uniswap',
+                      lendingProvider: newNet === 'solana' ? 'solend' : 'aave'
+                    });
+                  }} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
+                    <option value="solana">Solana</option>
+                    <option value="arbitrum">Arbitrum (EVM)</option>
+                    <option value="polygon">Polygon (EVM)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Strategy Name</label>
+                  <input value={editingStrategy.name} onChange={e => setEditingStrategy({...editingStrategy, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -578,41 +698,77 @@ export default function FlashLoanPage() {
                 <div>
                   <label className="block text-sm text-slate-400 mb-1">Lending Provider</label>
                   <select value={editingStrategy.lendingProvider} onChange={e => setEditingStrategy({...editingStrategy, lendingProvider: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-                    <option value="solend">Solend</option>
-                    <option value="kamino">Kamino</option>
-                    <option value="none">Recursos Próprios</option>
+                    {(editingStrategy.network || 'solana') === 'solana' ? (
+                      <>
+                        <option value="solend">Solend (Main Pool)</option>
+                        <option value="kamino">Kamino Finance (K-Lend)</option>
+                        <option value="none">Recursos Próprios</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="aave">Aave V3</option>
+                        <option value="balancer">Balancer FlashLoans</option>
+                      </>
+                    )}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">Borrow Fee % (APY)</label>
-                  <input type="number" step="0.01" value={editingStrategy.borrowApy} onChange={e => setEditingStrategy({...editingStrategy, borrowApy: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm text-slate-400 mb-1">DEX Provider</label>
-                  <select value={editingStrategy.provider} onChange={e => setEditingStrategy({...editingStrategy, provider: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-                    <option value="jupiter">Jupiter</option>
-                    <option value="raptor">Raptor API</option>
-                  </select>
+                  {(editingStrategy.network || 'solana') === 'solana' ? (
+                    <>
+                      <label className="block text-sm text-slate-400 mb-1">DEX Provider</label>
+                      <select value={editingStrategy.provider} onChange={e => setEditingStrategy({...editingStrategy, provider: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
+                        <option value="jupiter">Jupiter</option>
+                        <option value="raptor">Raptor API</option>
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-sm text-slate-400 mb-1">DEX Providers</label>
+                      <input disabled value="Auto-Routing (All DEXes)" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2 text-slate-500 outline-none cursor-not-allowed" />
+                    </>
+                  )}
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Target Arbitrage Token</label>
-                <select value={editingStrategy.tokenBMint} onChange={e => setEditingStrategy({...editingStrategy, tokenBMint: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-                  {KNOWN_TOKENS.map(t => (
-                    <option key={t.mint} value={t.mint}>{t.symbol}</option>
-                  ))}
-                </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Borrow Amount (USDC)</label>
-                  <input type="number" value={editingStrategy.borrowAmount} onChange={e => setEditingStrategy({...editingStrategy, borrowAmount: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" />
+                  <label className="block text-sm text-slate-400 mb-1">Base Token (Symbol or Address)</label>
+                  <input value={getDisplaySymbol(editingStrategy.tokenAMint)} onChange={e => setEditingStrategy({...editingStrategy, tokenAMint: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="e.g. USDC or 0x..." />
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Min. Profit (USDC)</label>
-                  <input type="number" step="0.01" value={editingStrategy.minProfitUsdc} onChange={e => setEditingStrategy({...editingStrategy, minProfitUsdc: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" />
+                  <label className="block text-sm text-slate-400 mb-1">Target Token (Symbol or Address)</label>
+                  <input value={getDisplaySymbol(editingStrategy.tokenBMint)} onChange={e => setEditingStrategy({...editingStrategy, tokenBMint: e.target.value, tokenBSymbol: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="e.g. WETH or 0x..." />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Borrow Amount ({KNOWN_TOKENS.find(t => t.mint === editingStrategy.tokenAMint)?.symbol || 'USDC'})</label>
+                  <input type="number" value={editingStrategy.borrowAmount || 0} onChange={e => setEditingStrategy({...editingStrategy, borrowAmount: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Min. Profit ({KNOWN_TOKENS.find(t => t.mint === editingStrategy.tokenAMint)?.symbol || 'USDC'})</label>
+                  <input type="number" step="0.01" value={editingStrategy.minProfitUsdc ?? 0} onChange={e => setEditingStrategy({...editingStrategy, minProfitUsdc: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" />
+                </div>
+              </div>
+              
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-lg flex items-start gap-4">
+                <div className="pt-1">
+                  <input 
+                    type="checkbox" 
+                    id="editMevProtection"
+                    checked={editingStrategy.mevProtection ?? true}
+                    onChange={(e) => setEditingStrategy({...editingStrategy, mevProtection: e.target.checked})}
+                    className="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-700 rounded focus:ring-indigo-600 focus:ring-2"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="editMevProtection" className="block text-sm font-medium text-white mb-1 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-emerald-400" /> Private RPC / MEV Protection
+                  </label>
+                  <p className="text-xs text-slate-400">
+                    Use Jito bundles to prevent frontrunning and save on gas.
+                  </p>
                 </div>
               </div>
               <div className="flex gap-3 mt-6">

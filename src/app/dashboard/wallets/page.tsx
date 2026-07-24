@@ -13,6 +13,7 @@ type TokenBalance = {
 type Wallet = {
   _id: string;
   acronym: string;
+  network?: string;
   publicKey: string;
   balanceSol?: number | null;
   tokens?: TokenBalance[];
@@ -22,10 +23,12 @@ export default function WalletsPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [acronym, setAcronym] = useState('');
+  const [network, setNetwork] = useState('Solana');
   const [publicKey, setPublicKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
 
   const [generateAcronym, setGenerateAcronym] = useState('');
+  const [generateNetwork, setGenerateNetwork] = useState('Solana');
   const [generatedMnemonic, setGeneratedMnemonic] = useState('');
   
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
@@ -51,6 +54,9 @@ export default function WalletsPage() {
         const dbWallets: Wallet[] = await res.json();
         
         const walletsWithBalances = await Promise.all(dbWallets.map(async (w) => {
+          if (w.network === 'EVM') {
+            return { ...w, balanceSol: null, tokens: [] }; // skip Solana RPC for EVM
+          }
           try {
             const rpcRes = await fetch(`/api/solana/balance?publicKey=${w.publicKey}`, {
               headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -78,7 +84,7 @@ export default function WalletsPage() {
     const res = await fetch('/api/wallets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      body: JSON.stringify({ acronym, secretKey })
+      body: JSON.stringify({ acronym, secretKey, network })
     });
     if (res.ok) {
       setAcronym(''); setPublicKey(''); setSecretKey('');
@@ -92,7 +98,7 @@ export default function WalletsPage() {
     const res = await fetch('/api/wallets/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      body: JSON.stringify({ acronym: generateAcronym })
+      body: JSON.stringify({ acronym: generateAcronym, network: generateNetwork })
     });
     if (res.ok) {
       const data = await res.json();
@@ -213,12 +219,27 @@ export default function WalletsPage() {
                 key={wallet._id} 
                 className="hover:bg-slate-800/30 transition-colors group"
               >
-                <td className="px-6 py-4 font-medium text-white transition-colors align-top pt-5">{wallet.acronym}</td>
+                <td className="px-6 py-4 font-medium text-white transition-colors align-top pt-5">
+                  <div className="flex items-center gap-2">
+                    {wallet.acronym}
+                    {wallet.network === 'EVM' && (
+                      <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/30">EVM</span>
+                    )}
+                    {wallet.network !== 'EVM' && (
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30">SOL</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-6 py-4 text-slate-400 font-mono text-xs align-top pt-5">{wallet.publicKey}</td>
                 <td className="px-6 py-4 align-top">
                   <div className="flex flex-col items-start gap-2">
                     <span className="font-medium text-emerald-400">
-                      {wallet.balanceSol !== undefined && wallet.balanceSol !== null ? `${wallet.balanceSol.toFixed(4)} SOL` : (wallet.balanceSol === null ? 'Error loading' : '...')}
+                      {wallet.network === 'EVM' 
+                        ? 'EVM Ready'
+                        : (wallet.balanceSol !== undefined && wallet.balanceSol !== null 
+                          ? `${wallet.balanceSol.toFixed(4)} SOL` 
+                          : (wallet.balanceSol === null ? 'Error loading' : '...'))
+                      }
                     </span>
                     {wallet.tokens && wallet.tokens.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-1">
@@ -277,7 +298,18 @@ export default function WalletsPage() {
           <p className="text-sm text-slate-400 mb-6">Import an existing Solana wallet by pasting its raw private key or 12/24-word seed phrase.</p>
           <form onSubmit={handleAdd} className="space-y-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Acronym</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Network</label>
+              <select 
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500"
+                value={network}
+                onChange={(e) => setNetwork(e.target.value)}
+              >
+                <option value="Solana">Solana</option>
+                <option value="EVM">EVM (Arbitrum, Ethereum, etc)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Acronym</label>
               <input required value={acronym} onChange={e => setAcronym(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" placeholder="e.g. MAIN_WALLET" />
             </div>
             <div>
@@ -299,7 +331,18 @@ export default function WalletsPage() {
           <p className="text-sm text-slate-400 mb-6">Create a brand new Solana wallet securely. We will generate the 12-word seed phrase and encrypt it in our database automatically.</p>
           <form onSubmit={handleGenerate} className="space-y-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Acronym</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Network</label>
+              <select 
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500"
+                value={generateNetwork}
+                onChange={(e) => setGenerateNetwork(e.target.value)}
+              >
+                <option value="Solana">Solana</option>
+                <option value="EVM">EVM (Arbitrum, Ethereum, etc)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Acronym</label>
               <input required value={generateAcronym} onChange={e => setGenerateAcronym(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" placeholder="e.g. FLASH_LOAN_BOT" />
             </div>
             <div className="pt-2">

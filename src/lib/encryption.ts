@@ -5,8 +5,11 @@ function getEncryptionKey(): Buffer {
   if (!secret) {
     throw new Error('FATAL: ENCRYPTION_KEY environment variable is not set. It must be a 32-byte string.');
   }
-  // Ensure the key is exactly 32 bytes for aes-256-gcm. We use sha256 to derive a 32-byte buffer.
-  return crypto.createHash('sha256').update(secret).digest();
+  let keyBuffer = Buffer.from(secret, 'hex');
+  if (keyBuffer.length !== 32) {
+    keyBuffer = crypto.createHash('sha256').update(secret).digest();
+  }
+  return keyBuffer;
 }
 
 export function encryptSecretKey(text: string, publicKey: string): string {
@@ -14,32 +17,69 @@ export function encryptSecretKey(text: string, publicKey: string): string {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   
-  // Set the public key as Additional Authenticated Data (AAD)
-  cipher.setAAD(Buffer.from(publicKey, 'utf8'));
-  
+  // No AAD is used to be compatible with the flash-go bot
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   
   const authTag = cipher.getAuthTag().toString('hex');
-  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+  // iv:encryptedText:authTag format to match the go bot fallback preference
+  return `${iv.toString('hex')}:${encrypted}:${authTag}`;
 }
 
 export function decryptSecretKey(encryptedText: string, publicKey: string): string {
-  const key = getEncryptionKey();
-  
+  if (!encryptedText.includes(':')) {
+    // If there are no colons, assume it's a raw base58 or JSON array string (unencrypted)
+    return encryptedText;
+  }
+
   const parts = encryptedText.split(':');
   if (parts.length !== 3) throw new Error('Invalid encrypted format');
   
   const iv = Buffer.from(parts[0], 'hex');
-  const authTag = Buffer.from(parts[1], 'hex');
-  const encrypted = parts[2];
+  let authTag = Buffer.from(parts[1], 'hex');
+  let encrypted = parts[2];
   
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAAD(Buffer.from(publicKey, 'utf8'));
-  decipher.setAuthTag(authTag);
+  if (authTag.length !== 16) {
+    // try alternative order (iv:encrypted:authTag)
+    const possibleAuthTag = Buffer.from(parts[2], 'hex');
+    if (possibleAuthTag.length === 16) {
+      encrypted = parts[1];
+      authTag = possibleAuthTag;
+    }
+  }
+
+  const secret = process.env.ENCRYPTION_KEY;
+  if (!secret) throw new Error('ENCRYPTION_KEY missing');
+
+  // Key 1: Exact flash-go bot match (hex decode)
+  let key1 = Buffer.from(secret, 'hex');
+  if (key1.length !== 32) {
+    key1 = crypto.createHash('sha256').update(secret).digest();
+  }
   
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  
-  return decrypted;
+  // Key 2: Old dashboard match (always sha256)
+  const key2 = crypto.createHash('sha256').update(secret).digest();
+
+  const keysToTry = [key1, key2];
+  const aadsToTry = [null, Buffer.from(publicKey, 'utf8')];
+
+  for (const key of keysToTry) {
+    for (const aad of aadsToTry) {
+      try {
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+        if (aad) {
+          decipher.setAAD(aad);
+        }
+        decipher.setAuthTag(authTag);
+        
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+      } catch (e) {
+        // Try next combination
+      }
+    }
+  }
+
+  throw new Error('Could not decrypt wallet');
 }

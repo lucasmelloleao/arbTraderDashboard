@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export const GET = withAuth(async (req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
-    const status = await SystemStatus.findOne({ id: 'global' });
+    const status = await SystemStatus.findOne({ botId: 'flash-sniper' });
     
     let botOnline = false;
     if (status && status.botLastHeartbeat) {
@@ -53,7 +53,7 @@ export const PUT = withAuth(async (req: NextRequest, userId: string) => {
     }
 
     const status = await SystemStatus.findOneAndUpdate(
-      { id: 'global' },
+      { botId: 'flash-sniper' },
       updateData,
       { upsert: true, new: true }
     );

@@ -18,11 +18,12 @@ import * as bip39 from 'bip39';
 import { derivePath } from 'ed25519-hd-key';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { ethers } from 'ethers';
 
 export const POST = withAuth(async (req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
-    const { acronym, secretKey } = await req.json();
+    const { acronym, secretKey, network = 'Solana' } = await req.json();
 
     if (!acronym || !secretKey) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
@@ -31,30 +32,55 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
     let rawSecretKey = secretKey.trim();
     let derivedPublicKey = '';
 
-    // Check if the input is a seed phrase (contains spaces)
-    if (rawSecretKey.includes(' ')) {
-      if (!bip39.validateMnemonic(rawSecretKey)) {
-        return NextResponse.json({ error: 'Invalid seed phrase' }, { status: 400 });
+    if (network === 'EVM') {
+      // Process as EVM
+      if (rawSecretKey.includes(' ')) {
+        // Seed phrase
+        try {
+          const wallet = ethers.Wallet.fromPhrase(rawSecretKey);
+          derivedPublicKey = wallet.address;
+          rawSecretKey = wallet.privateKey; // normalize to hex private key
+        } catch (err) {
+          return NextResponse.json({ error: 'Invalid EVM seed phrase' }, { status: 400 });
+        }
+      } else {
+        // Raw private key
+        try {
+          // ensure it starts with 0x for ethers
+          const formattedKey = rawSecretKey.startsWith('0x') ? rawSecretKey : `0x${rawSecretKey}`;
+          const wallet = new ethers.Wallet(formattedKey);
+          derivedPublicKey = wallet.address;
+          rawSecretKey = formattedKey;
+        } catch (err) {
+          return NextResponse.json({ error: 'Invalid EVM private key' }, { status: 400 });
+        }
       }
-      const seed = bip39.mnemonicToSeedSync(rawSecretKey);
-      const path = "m/44'/501'/0'/0'";
-      const derivedSeed = derivePath(path, seed.toString('hex')).key;
-      const keypair = Keypair.fromSeed(derivedSeed);
-      derivedPublicKey = keypair.publicKey.toBase58();
-      rawSecretKey = bs58.encode(keypair.secretKey);
     } else {
-      // Treat as raw private key (base58)
-      try {
-        const keypair = Keypair.fromSecretKey(bs58.decode(rawSecretKey));
+      // Process as Solana
+      if (rawSecretKey.includes(' ')) {
+        if (!bip39.validateMnemonic(rawSecretKey)) {
+          return NextResponse.json({ error: 'Invalid seed phrase' }, { status: 400 });
+        }
+        const seed = bip39.mnemonicToSeedSync(rawSecretKey);
+        const path = "m/44'/501'/0'/0'";
+        const derivedSeed = derivePath(path, seed.toString('hex')).key;
+        const keypair = Keypair.fromSeed(derivedSeed);
         derivedPublicKey = keypair.publicKey.toBase58();
-      } catch (err) {
-        return NextResponse.json({ error: 'Invalid private key format' }, { status: 400 });
+        rawSecretKey = bs58.encode(keypair.secretKey);
+      } else {
+        // Treat as raw private key (base58)
+        try {
+          const keypair = Keypair.fromSecretKey(bs58.decode(rawSecretKey));
+          derivedPublicKey = keypair.publicKey.toBase58();
+        } catch (err) {
+          return NextResponse.json({ error: 'Invalid private key format' }, { status: 400 });
+        }
       }
     }
 
     const encryptedSecretKey = encryptSecretKey(rawSecretKey, derivedPublicKey);
 
-    const wallet = await Wallet.create({ userId, acronym, publicKey: derivedPublicKey, secretKey: encryptedSecretKey });
+    const wallet = await Wallet.create({ userId, acronym, network, publicKey: derivedPublicKey, secretKey: encryptedSecretKey });
     return NextResponse.json(wallet, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
