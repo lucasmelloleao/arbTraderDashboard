@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Zap, Settings, Play, Pause, AlertTriangle, Pencil, Activity, Clock, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Zap, Settings, Play, Pause, AlertTriangle, Pencil, Activity, Clock, TrendingUp, TrendingDown, ExternalLink, ScanSearch, CheckCircle2, XCircle, Loader2, RefreshCw, TriangleAlert } from 'lucide-react';
 import clsx from 'clsx';
 
 const KNOWN_TOKENS = [
@@ -91,6 +91,13 @@ export default function FlashLoanPage() {
   const [selectedWalletId, setSelectedWalletId] = useState('');
   const [editingStrategy, setEditingStrategy] = useState<Strategy | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  // --- Monitor Snapshot ---
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [snapshotResult, setSnapshotResult] = useState<any>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [snapshotAmount, setSnapshotAmount] = useState('100');
+  const [snapshotForceExecute, setSnapshotForceExecute] = useState(false);
 
   const fetchStrategies = async () => {
     const res = await fetch('/api/strategies', {
@@ -246,6 +253,27 @@ export default function FlashLoanPage() {
     } else {
       const data = await res.json();
       alert(`Erro: ${data.error || 'Falha ao editar estratégia'}`);
+    }
+  };
+
+  const runMonitorSnapshot = async () => {
+    setSnapshotLoading(true);
+    setSnapshotResult(null);
+    setSnapshotError(null);
+    try {
+      const res = await fetch(`/api/monitor/snapshot?amount=${snapshotAmount}&forceExecute=${snapshotForceExecute}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSnapshotError(data.error || 'Erro desconhecido');
+      } else {
+        setSnapshotResult(data);
+      }
+    } catch (e: any) {
+      setSnapshotError(e.message || 'Falha ao conectar com a API');
+    } finally {
+      setSnapshotLoading(false);
     }
   };
 
@@ -655,6 +683,535 @@ export default function FlashLoanPage() {
           </div>
         )}
       </div>
+
+      {/* ===== PAINEL: MONITOR SOLANA SNAPSHOT ===== */}
+      <div className="mt-8 overflow-hidden rounded-2xl" style={{background: 'linear-gradient(135deg, #0f0c1a 0%, #0d1117 40%, #0a0f1e 100%)', border: '1px solid rgba(139,92,246,0.2)', boxShadow: '0 0 60px -10px rgba(139,92,246,0.15)'}}>
+        
+        {/* Glow top bar */}
+        <div style={{height: '2px', background: 'linear-gradient(90deg, transparent, #8b5cf6, #a78bfa, #8b5cf6, transparent)'}} />
+
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 mb-8">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 4px 15px rgba(124,58,237,0.4)'}}>
+                  <ScanSearch className="w-4 h-4 text-white" />
+                </div>
+                <h4 className="text-xl font-bold text-white tracking-tight">Monitor Solana</h4>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)'}}>SCAN RÁPIDO</span>
+              </div>
+              <p className="text-sm text-slate-400 ml-12">Cotações ao vivo via RPC · Orca · Raydium · Meteora · SOL/USDC</p>
+            </div>
+
+            <div className="flex items-center gap-3 ml-12 sm:ml-0">
+              <div className="flex items-center gap-2 bg-slate-900/80 border border-slate-700/50 rounded-xl px-3 py-2">
+                <span className="text-xs text-slate-400 font-medium">Capital</span>
+                <span className="text-slate-600">|</span>
+                <span className="text-xs text-violet-300 font-bold">USDC</span>
+                <input
+                  type="number"
+                  value={snapshotAmount}
+                  onChange={e => setSnapshotAmount(e.target.value)}
+                  className="w-16 bg-transparent text-white outline-none font-mono text-sm text-center"
+                  min="1"
+                  disabled={snapshotLoading}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 bg-slate-900/80 border border-slate-700/50 rounded-xl px-3 py-2 cursor-pointer" onClick={() => !snapshotLoading && setSnapshotForceExecute(!snapshotForceExecute)}>
+                <input
+                  type="checkbox"
+                  checked={snapshotForceExecute}
+                  onChange={() => {}}
+                  className="w-4 h-4 text-rose-500 bg-slate-900 border-slate-700 rounded focus:ring-rose-500 focus:ring-2 pointer-events-none"
+                />
+                <span className="text-xs text-rose-400 font-bold uppercase tracking-wider">Forçar Jito</span>
+              </div>
+
+              <button
+                id="btn-monitor-snapshot"
+                onClick={runMonitorSnapshot}
+                disabled={snapshotLoading}
+                className="relative flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group"
+                style={{background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 4px 20px rgba(124,58,237,0.35)'}}
+              >
+                <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: 'linear-gradient(135deg, #6d28d9, #4338ca)'}} />
+                <span className="relative flex items-center gap-2">
+                  {snapshotLoading
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Escaneando...</>
+                    : <><ScanSearch className="w-4 h-4" /> Executar Scan</>}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Estado inicial */}
+          {!snapshotLoading && !snapshotResult && !snapshotError && (
+            <div className="py-16 flex flex-col items-center gap-5">
+              <div className="relative">
+                <div className="w-24 h-24 rounded-full flex items-center justify-center" style={{background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%)', border: '1px dashed rgba(139,92,246,0.3)'}}>
+                  <ScanSearch className="w-10 h-10 text-violet-500/60" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-violet-500/20 border border-violet-500/40 animate-ping" />
+              </div>
+              <div className="text-center">
+                <p className="text-slate-300 font-medium mb-2">Pronto para escanear o mercado</p>
+                <p className="text-sm text-slate-500">Clique em <span className="text-violet-400 font-semibold">Executar Scan</span> para buscar as cotações ao vivo</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2">
+                <span className="text-slate-500">Servidor:</span>
+                <code className="text-violet-400 font-mono">npx tsx snapshot.ts</code>
+                <span className="text-slate-600">na pasta flash-solana</span>
+              </div>
+            </div>
+          )}
+
+          {/* Loading */}
+          {snapshotLoading && (
+            <div className="py-16 flex flex-col items-center gap-6">
+              <div className="relative w-20 h-20">
+                <div className="absolute inset-0 rounded-full animate-spin" style={{border: '2px solid transparent', borderTopColor: '#8b5cf6', borderRightColor: '#8b5cf6'}} />
+                <div className="absolute inset-2 rounded-full animate-spin" style={{border: '2px solid transparent', borderTopColor: '#a78bfa', animationDirection: 'reverse', animationDuration: '0.8s'}} />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{background: 'rgba(139,92,246,0.2)'}}>
+                    <ScanSearch className="w-4 h-4 text-violet-400" />
+                  </div>
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-white font-semibold mb-1">Conectando ao RPC Solana...</p>
+                <p className="text-sm text-slate-500">Lendo estado das pools Orca · Raydium · Meteora</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {['Orca', 'Raydium', 'Meteora'].map((d, i) => (
+                  <div key={d} className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" style={{animationDelay: `${i * 200}ms`}} />
+                    {d}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Erro */}
+          {snapshotError && !snapshotLoading && (
+            <div className="rounded-xl p-5 flex items-start gap-4" style={{background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)'}}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{background: 'rgba(239,68,68,0.15)'}}>
+                <XCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h5 className="text-red-400 font-bold mb-1">Falha no Scan</h5>
+                <p className="text-red-200/70 text-sm break-words">{snapshotError}</p>
+                <div className="mt-3 flex items-center gap-2 text-xs bg-red-950/30 border border-red-500/10 rounded-lg px-3 py-2 font-mono text-red-300/50">
+                  <span>$</span><span>cd flash-solana && npm run start:snapshot</span>
+                </div>
+              </div>
+              <button onClick={() => setSnapshotError(null)} className="text-red-500/30 hover:text-red-400 transition-colors shrink-0">
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Resultado */}
+          {snapshotResult && !snapshotLoading && (() => {
+            const r = snapshotResult;
+            const prices = r.quotes.filter((q: any) => q.status === 'ok').map((q: any) => q.price);
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const spreadPct = prices.length > 1 ? ((maxPrice - minPrice) / minPrice) * 100 : 0;
+
+            return (
+              <div className="space-y-6">
+
+                {/* Meta row */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-slate-600 font-mono">{new Date(r.timestamp).toLocaleTimeString('pt-BR')}</span>
+                  <span className="text-slate-700">·</span>
+                  <span className="text-slate-500 font-mono font-semibold">{r.pair}</span>
+                  <span className="text-slate-700">·</span>
+                  <span className="text-slate-500">${r.borrowAmount} USDC simulados</span>
+                  <span className="text-slate-700">·</span>
+                  <span className="text-slate-600">⚡ {r.durationMs}ms via RPC</span>
+                  <button
+                    onClick={runMonitorSnapshot}
+                    className="ml-auto flex items-center gap-1.5 text-slate-400 hover:text-violet-400 transition-colors bg-slate-800/60 hover:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/50"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Atualizar
+                  </button>
+                </div>
+
+                {/* DEX Quote Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {r.quotes.map((q: any, idx: number) => {
+                    const isHighest = q.status === 'ok' && q.price === maxPrice;
+                    const isLowest = q.status === 'ok' && q.price === minPrice && prices.length > 1;
+                    const barWidth = q.status === 'ok' && prices.length > 1
+                      ? ((q.price - minPrice) / (maxPrice - minPrice || 1)) * 100
+                      : 0;
+                    const colors = [
+                      {grad: 'from-cyan-500/10 to-cyan-500/5', border: 'rgba(6,182,212,0.25)', dot: '#06b6d4', bar: 'rgba(6,182,212,0.5)'},
+                      {grad: 'from-amber-500/10 to-amber-500/5', border: 'rgba(245,158,11,0.25)', dot: '#f59e0b', bar: 'rgba(245,158,11,0.5)'},
+                      {grad: 'from-violet-500/10 to-violet-500/5', border: 'rgba(139,92,246,0.25)', dot: '#8b5cf6', bar: 'rgba(139,92,246,0.5)'},
+                      {grad: 'from-lime-500/10 to-lime-500/5', border: 'rgba(132,204,22,0.25)', dot: '#84cc16', bar: 'rgba(132,204,22,0.5)'},
+                    ];
+                    const c = colors[idx] || colors[0];
+                    return (
+                      <div
+                        key={q.dex}
+                        className={clsx('rounded-2xl p-5 relative overflow-hidden transition-all', q.status !== 'ok' && 'opacity-50')}
+                        style={{background: `linear-gradient(135deg, rgba(15,12,26,0.9), rgba(10,15,30,0.8))`, border: `1px solid ${c.border}`}}
+                      >
+                        {/* Top accent */}
+                        <div className="absolute top-0 left-0 right-0 h-px" style={{background: `linear-gradient(90deg, transparent, ${c.dot}, transparent)`}} />
+
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full" style={{background: c.dot, boxShadow: `0 0 8px ${c.dot}`}} />
+                            <span className="text-sm font-bold text-white">{q.dex}</span>
+                          </div>
+                          {q.status === 'ok' ? (
+                            <div className="flex flex-col items-end gap-1">
+                              {isHighest && prices.length > 1 && (
+                                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">VENDER AQUI</span>
+                              )}
+                              {isLowest && (
+                                <span className="text-[9px] font-black uppercase tracking-widest text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">COMPRAR AQUI</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[9px] font-black uppercase text-red-400/60">OFFLINE</span>
+                          )}
+                        </div>
+
+                        {q.status === 'ok' ? (
+                          <>
+                            {/* Price */}
+                            <div className="mb-4">
+                              <p className="text-3xl font-black text-white font-mono tracking-tight">
+                                ${q.price.toFixed(2)}
+                                <span className="text-base font-normal text-slate-500 ml-1">.{q.price.toFixed(6).split('.')[1]?.slice(2)}</span>
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">1 SOL → USDC</p>
+                            </div>
+
+                            {/* Spread bar */}
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between items-center text-[10px]">
+                                <span className="text-slate-600">Spread relativo</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className="px-1.5 py-0.5 rounded font-bold uppercase tracking-wide"
+                                    style={{
+                                      fontSize: '8px',
+                                      background: q.feeSource === 'onchain' ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.12)',
+                                      color: q.feeSource === 'onchain' ? '#34d399' : '#64748b',
+                                      border: `1px solid ${q.feeSource === 'onchain' ? 'rgba(16,185,129,0.25)' : 'rgba(100,116,139,0.2)'}`,
+                                    }}
+                                  >
+                                    {q.feeSource === 'onchain' ? '⛓ on-chain' : 'estimada'}
+                                  </span>
+                                  <span className="text-slate-500 font-mono">Fee {(q.feeRawPct ?? ((1 - q.fee) * 100)).toFixed(3)}%</span>
+                                </div>
+                              </div>
+                              <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-700"
+                                  style={{width: `${Math.max(barWidth, 8)}%`, background: `linear-gradient(90deg, ${c.dot}80, ${c.dot})`}}
+                                />
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="py-4">
+                            <p className="text-sm text-slate-500">Pool indisponível</p>
+                            <p className="text-xs text-slate-600 mt-1">{q.error}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Spread summary */}
+                {prices.length > 1 && (
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)'}}>
+                    <div className="flex-1">
+                      <p className="text-xs text-slate-500 mb-1">Spread Bruto entre pools</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-slate-800/80 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{width: `${Math.min(spreadPct * 500, 100)}%`, background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)'}} />
+                        </div>
+                        <span className="text-sm font-bold font-mono text-violet-300">{spreadPct.toFixed(4)}%</span>
+                      </div>
+                    </div>
+                    <div className="text-right text-xs">
+                      <p className="text-slate-600">Diferença</p>
+                      <p className="text-slate-300 font-mono font-semibold">${(maxPrice - minPrice).toFixed(4)}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Resultado de arbitragem */}
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{
+                    background: r.hasOpportunity
+                      ? 'linear-gradient(135deg, rgba(4,120,87,0.12), rgba(6,78,59,0.08))'
+                      : 'linear-gradient(135deg, rgba(15,23,42,0.8), rgba(10,15,30,0.6))',
+                    border: r.hasOpportunity ? '1px solid rgba(16,185,129,0.25)' : '1px solid rgba(51,65,85,0.5)',
+                  }}
+                >
+                  {/* Result header */}
+                  <div className="px-6 py-4 flex items-center gap-4" style={{borderBottom: r.hasOpportunity ? '1px solid rgba(16,185,129,0.15)' : '1px solid rgba(51,65,85,0.3)'}}>
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                      style={{background: r.hasOpportunity ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.1)'}}
+                    >
+                      {r.hasOpportunity
+                        ? <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        : <TriangleAlert className="w-5 h-5 text-slate-500" />
+                      }
+                    </div>
+                    <div>
+                      <h5 className={clsx('font-black text-lg', r.hasOpportunity ? 'text-emerald-400' : 'text-slate-400')}>
+                        {r.hasOpportunity ? 'Oportunidade Detectada!' : 'Sem Oportunidade Lucrativa'}
+                      </h5>
+                      <p className="text-xs text-slate-500">
+                        {r.hasOpportunity
+                          ? `Lucro potencial com $${r.borrowAmount} USDC de capital`
+                          : 'Spread insuficiente para cobrir as taxas de transação'}
+                      </p>
+                    </div>
+
+                    {r.bestRoute && (
+                      <div className="ml-auto text-right">
+                        <p className={clsx('text-3xl font-black font-mono', r.bestRoute.profit > 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                          {r.bestRoute.profit > 0 ? '+' : ''}${r.bestRoute.profit.toFixed(4)}
+                        </p>
+                        <p className={clsx('text-xs font-semibold font-mono', r.bestRoute.profitPct > 0 ? 'text-emerald-500' : 'text-rose-500')}>
+                          {r.bestRoute.profitPct > 0 ? '+' : ''}{r.bestRoute.profitPct.toFixed(4)}% ROI
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Routes table */}
+                  <div className="px-6 py-4 space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest text-slate-600 font-bold mb-3">Todas as rotas · ordenadas por profit</p>
+                    {r.allRoutes.map((route: any, i: number) => {
+                      const isFirst = i === 0;
+                      const maxAbs = Math.abs(r.allRoutes[0]?.profit || 1);
+                      const barW = Math.abs(route.profit) / maxAbs * 100;
+                      return (
+                        <div
+                          key={i}
+                          className={clsx('flex items-center gap-4 px-4 py-3 rounded-xl transition-all', isFirst && r.hasOpportunity && 'ring-1 ring-emerald-500/30')}
+                          style={{background: isFirst ? (r.hasOpportunity ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.04)') : 'rgba(15,23,42,0.4)'}}
+                        >
+                          <span className="text-[10px] font-bold text-slate-600 w-4 shrink-0">#{i + 1}</span>
+                          <span className="text-sm text-slate-300 flex-1">{route.route}</span>
+                          <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden shrink-0">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${barW}%`,
+                                background: route.profit > 0 ? 'linear-gradient(90deg, #059669, #10b981)' : 'linear-gradient(90deg, #be123c, #f43f5e)'
+                              }}
+                            />
+                          </div>
+                          <span className={clsx('font-black font-mono text-sm w-24 text-right shrink-0', route.profit > 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                            {route.profit > 0 ? '+' : ''}${route.profit.toFixed(4)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ===== SIMULAÇÃO DE FLASH LOAN ===== */}
+                {r.flashLoanSim && r.flashLoanSim.triggered && (() => {
+                  const sim = r.flashLoanSim;
+                  const isProfit = sim.isProfitable;
+                  const isWarn = !isProfit && sim.netProfit > -sim.fees.totalFees * 0.5;
+
+                  return (
+                    <div
+                      className="rounded-2xl overflow-hidden"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(15,12,26,0.95), rgba(10,15,30,0.9))',
+                        border: isProfit
+                          ? '1px solid rgba(16,185,129,0.3)'
+                          : isWarn
+                            ? '1px solid rgba(245,158,11,0.3)'
+                            : '1px solid rgba(99,102,241,0.25)',
+                        boxShadow: isProfit
+                          ? '0 0 30px -8px rgba(16,185,129,0.15)'
+                          : '0 0 30px -8px rgba(99,102,241,0.1)',
+                      }}
+                    >
+                      {/* Top accent bar */}
+                      <div style={{height: '2px', background: isProfit
+                        ? 'linear-gradient(90deg, transparent, #10b981, transparent)'
+                        : isWarn
+                          ? 'linear-gradient(90deg, transparent, #f59e0b, transparent)'
+                          : 'linear-gradient(90deg, transparent, #6366f1, transparent)'
+                      }} />
+
+                      {/* Header */}
+                      <div className="px-6 py-4 flex items-center gap-4" style={{borderBottom: '1px solid rgba(30,41,59,0.8)'}}>
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', boxShadow: '0 4px 15px rgba(99,102,241,0.3)'}}>
+                          <Zap className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-white font-black text-base">Simulação de Flash Loan</p>
+                          <p className="text-xs text-slate-500">
+                            Disparado porque profit bruto (${sim.grossProfit.toFixed(4)}) &lt; ${sim.threshold.toFixed(2)} · Protocolo: {sim.lendingProvider}
+                          </p>
+                        </div>
+                        <div className={`ml-auto px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider ${
+                          isProfit
+                            ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
+                            : isWarn
+                              ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
+                              : 'text-rose-400 bg-rose-500/10 border border-rose-500/20'
+                        }`}>
+                          {isProfit ? 'Lucrativo' : isWarn ? 'Marginal' : 'Inviável'}
+                        </div>
+                      </div>
+
+                      <div className="px-6 py-5 space-y-5">
+
+                        {/* Breakdown de fees */}
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest text-slate-600 font-bold mb-3">Breakdown de Custos</p>
+                          <div className="space-y-2">
+                            {/* Profit bruto */}
+                            <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{background: 'rgba(15,23,42,0.6)'}}>
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                                <span className="text-sm text-slate-300">Profit Bruto (spread das DEXes)</span>
+                              </div>
+                              <span className={`font-mono font-bold text-sm ${sim.grossProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {sim.grossProfit >= 0 ? '+' : ''}${sim.grossProfit.toFixed(6)}
+                              </span>
+                            </div>
+
+                            {/* Divider */}
+                            <div className="relative flex items-center gap-2 py-1">
+                              <div className="flex-1 h-px bg-slate-800" />
+                              <span className="text-[9px] text-slate-600 uppercase tracking-widest">Custos</span>
+                              <div className="flex-1 h-px bg-slate-800" />
+                            </div>
+
+                            {/* Flash loan fee */}
+                            <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{background: 'rgba(15,23,42,0.4)'}}>
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                                <span className="text-sm text-slate-400">{sim.fees.lendingProvider} Flash Loan Fee</span>
+                                <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded font-mono">{sim.fees.flashLoanFeePct.toFixed(2)}%</span>
+                              </div>
+                              <span className="font-mono text-sm text-rose-400/80">−${sim.fees.flashLoanFee.toFixed(6)}</span>
+                            </div>
+
+                            {/* Solana network fee */}
+                            <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{background: 'rgba(15,23,42,0.4)'}}>
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                                <span className="text-sm text-slate-400">Solana Network Fee</span>
+                                <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded font-mono">~0.00041 SOL</span>
+                              </div>
+                              <span className="font-mono text-sm text-rose-400/80">−${sim.fees.solanaNetworkFee.toFixed(6)}</span>
+                            </div>
+
+                            {/* Jito bundle tip */}
+                            <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{background: 'rgba(15,23,42,0.4)'}}>
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                <span className="text-sm text-slate-400">Jito Bundle Tip</span>
+                                <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded font-mono">0.001 SOL</span>
+                              </div>
+                              <span className="font-mono text-sm text-rose-400/80">−${sim.fees.jitoBundleTip.toFixed(6)}</span>
+                            </div>
+
+                            {/* Total fees divider */}
+                            <div className="border-t border-slate-800/80 pt-2">
+                              <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.1)'}}>
+                                <span className="text-sm font-semibold text-slate-300">Total de Taxas</span>
+                                <span className="font-mono font-bold text-sm text-rose-400">−${sim.fees.totalFees.toFixed(6)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Net profit resultado */}
+                        <div
+                          className="rounded-xl p-4 flex items-center justify-between"
+                          style={{
+                            background: isProfit
+                              ? 'linear-gradient(135deg, rgba(4,120,87,0.15), rgba(6,78,59,0.1))'
+                              : 'linear-gradient(135deg, rgba(127,29,29,0.15), rgba(69,10,10,0.1))',
+                            border: isProfit ? '1px solid rgba(16,185,129,0.25)' : '1px solid rgba(239,68,68,0.2)',
+                          }}
+                        >
+                          <div>
+                            <p className="text-xs text-slate-500 mb-1">Lucro Líquido (após todas as taxas)</p>
+                            <p className={`text-3xl font-black font-mono ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {sim.netProfit >= 0 ? '+' : ''}${sim.netProfit.toFixed(6)}
+                            </p>
+                            <p className={`text-xs font-mono font-semibold mt-0.5 ${isProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              {sim.netProfitPct >= 0 ? '+' : ''}{sim.netProfitPct.toFixed(4)}% ROI líquido
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-slate-500 mb-1">SOL price usado</p>
+                            <p className="text-sm font-mono text-slate-300">${sim.solPriceUsed.toFixed(2)}</p>
+                          </div>
+                        </div>
+
+                        {/* Veredito */}
+                        <div className="flex items-start gap-3 px-4 py-3 rounded-xl" style={{background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(30,41,59,0.5)'}}>
+                          <div className="text-base mt-0.5">{isProfit ? '✅' : isWarn ? '⚠️' : '❌'}</div>
+                          <div>
+                            <p className={`text-sm font-bold ${isProfit ? 'text-emerald-400' : isWarn ? 'text-amber-400' : 'text-rose-400'}`}>
+                              Veredito
+                            </p>
+                            <p className="text-sm text-slate-300 mt-0.5">{sim.verdict}</p>
+                          </div>
+                        </div>
+
+                        {/* Break-even capital */}
+                        {!isProfit && isFinite(sim.breakEvenCapital) && (
+                          <div className="flex items-center justify-between px-4 py-3 rounded-xl" style={{background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)'}}>
+                            <div>
+                              <p className="text-xs text-slate-500 mb-0.5">Capital mínimo para break-even</p>
+                              <p className="text-xs text-slate-600">Com este spread, seria necessário:</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-2xl font-black font-mono text-violet-300">
+                                ${sim.breakEvenCapital.toLocaleString('pt-BR')}
+                              </p>
+                              <p className="text-xs text-violet-500 font-mono">USDC de capital</p>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* ===== FIM DA SIMULAÇÃO ===== */}
+
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Bottom glow */}
+        <div style={{height: '1px', background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.15), transparent)'}} />
+      </div>
+      {/* ===== FIM DO PAINEL SNAPSHOT ===== */}
 
       {editingStrategy && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">

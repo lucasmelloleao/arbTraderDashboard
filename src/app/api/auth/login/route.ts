@@ -27,6 +27,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ token, user: { id: user._id, name: user.name, email: user.email } });
   } catch (error: any) {
+    console.error('❌ [Login] Error:', error?.message, error?.code, error?.stack?.split('\n')[0]);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
