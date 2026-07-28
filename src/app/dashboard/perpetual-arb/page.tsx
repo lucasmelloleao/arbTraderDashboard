@@ -523,6 +523,12 @@ export default function PerpetualArbPage() {
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [exchangeKeys, setExchangeKeys] = useState<ExchangeKey[]>([]);
 
+  const [settings, setSettings] = useState<any>(null);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [settingsForm, setSettingsForm] = useState<any>({});
+  const [botOnline, setBotOnline] = useState<boolean>(false);
+
   // ── Derived stats ──────────────────────────────────────────────────────────
   const totalPnl = trades.reduce((acc, t) => acc + (t.pnl ?? 0), 0);
   const executedCount = trades.filter((t) => t.status === 'executed').length;
@@ -561,6 +567,47 @@ export default function PerpetualArbPage() {
     } catch { /* silent */ }
   };
 
+  const fetchBotStatus = async () => {
+    try {
+      const res = await fetch('/api/bot-status?botName=funding-arb', { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setBotOnline(data.isOnline);
+        return data.isOnline;
+      }
+    } catch {}
+    setBotOnline(false);
+    return false;
+  };
+
+  const fetchSettings = async () => {
+    setLoadingSettings(true);
+    try {
+      const res = await fetch('/api/perp-arb-settings', { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        const isOnline = await fetchBotStatus();
+        if (!isOnline && data.isScanningEnabled) {
+          updateSettings({ isScanningEnabled: false });
+        } else {
+          setSettings(data);
+        }
+      }
+    } catch { /* silent */ }
+    finally { setLoadingSettings(false); }
+  };
+
+  const updateSettings = async (updates: any) => {
+    try {
+      const res = await fetch('/api/perp-arb-settings', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err: any) { setError(err.message); }
+  };
+
   const updateStrategy = async (strategy: Partial<PerpArbStrategy> & { _id: string }) => {
     try {
       const res = await fetch('/api/perp-arb/strategies', {
@@ -588,8 +635,8 @@ export default function PerpetualArbPage() {
   };
 
   useEffect(() => {
-    fetchStrategies(); fetchTrades(); fetchExchanges();
-    const interval = setInterval(() => { fetchStrategies(); fetchTrades(); }, 5000);
+    fetchStrategies(); fetchTrades(); fetchExchanges(); fetchSettings();
+    const interval = setInterval(() => { fetchStrategies(); fetchTrades(); fetchSettings(); }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -641,18 +688,24 @@ export default function PerpetualArbPage() {
           <p className="mt-1 text-sm text-gray-400">Arbitragem de funding rate entre mercados perpétuos e spot.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {settings && (
+            <button
+              disabled={!botOnline}
+              title={!botOnline ? 'O robô está offline' : ''}
+              onClick={() => updateSettings({ isScanningEnabled: !settings.isScanningEnabled })}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                settings.isScanningEnabled ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              }`}
+            >
+              {settings.isScanningEnabled ? <><Pause className="h-4 w-4" /> Desligar Pescaria</> : <><Play className="h-4 w-4" /> Ligar Pescaria</>}
+            </button>
+          )}
           <button
-            onClick={() => { fetchStrategies(); fetchTrades(); }}
-            disabled={loadingStrategies || loadingTrades}
+            onClick={() => { fetchStrategies(); fetchTrades(); fetchSettings(); }}
+            disabled={loadingStrategies || loadingTrades || loadingSettings}
             className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-50 transition-colors"
           >
-            <RefreshCw className={`h-4 w-4 ${(loadingStrategies || loadingTrades) ? 'animate-spin' : ''}`} /> Atualizar
-          </button>
-          <button
-            onClick={() => setShowForm({ mode: 'create' })}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors"
-          >
-            <Plus className="h-4 w-4" /> Nova Estratégia
+            <RefreshCw className={`h-4 w-4 ${(loadingStrategies || loadingTrades || loadingSettings) ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -664,20 +717,51 @@ export default function PerpetualArbPage() {
         </div>
       )}
 
-      {/* Ideal values reference card */}
-      <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <Shield className="h-4 w-4 text-emerald-400" />
-          <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400">Valores ideais recomendados</span>
+      {/* Global Settings Panel */}
+      {settings && (
+        <div className="mt-5 rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-indigo-400" />
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-indigo-400">Configurações Globais do Robô</h2>
+            </div>
+            {!isEditingSettings ? (
+              <button onClick={() => { setSettingsForm({ ...settings }); setIsEditingSettings(true); }} className="text-xs font-semibold text-indigo-300 hover:text-white underline">Editar</button>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={() => setIsEditingSettings(false)} className="text-xs font-semibold text-slate-400 hover:text-white underline">Cancelar</button>
+                <button onClick={() => { updateSettings(settingsForm); setIsEditingSettings(false); }} className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 underline">Salvar</button>
+              </div>
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-6 text-sm">
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Aporte p/ Moeda (USDT)</span>
+              {!isEditingSettings ? <span className="font-bold text-white">${settings.tradeSize}</span> : <input type="number" value={settingsForm.tradeSize} onChange={e => setSettingsForm({ ...settingsForm, tradeSize: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Funding Mínimo (%)</span>
+              {!isEditingSettings ? <span className="font-bold text-white">{settings.minFundingRatePct}%</span> : <input type="number" step="0.001" value={settingsForm.minFundingRatePct} onChange={e => setSettingsForm({ ...settingsForm, minFundingRatePct: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Vol 24h Mínimo (USDT)</span>
+              {!isEditingSettings ? <span className="font-bold text-white">${settings.minVolume24hUSD.toLocaleString()}</span> : <input type="number" value={settingsForm.minVolume24hUSD} onChange={e => setSettingsForm({ ...settingsForm, minVolume24hUSD: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Max Slippage (%)</span>
+              {!isEditingSettings ? <span className="font-bold text-white">{settings.maxSlippagePct}%</span> : <input type="number" step="0.01" value={settingsForm.maxSlippagePct} onChange={e => setSettingsForm({ ...settingsForm, maxSlippagePct: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Max Perda Diária (USDT)</span>
+              {!isEditingSettings ? <span className="font-bold text-white">${settings.maxDailyLoss}</span> : <input type="number" value={settingsForm.maxDailyLoss} onChange={e => setSettingsForm({ ...settingsForm, maxDailyLoss: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Ciclo de Scan (Minutos)</span>
+              {!isEditingSettings ? <span className="font-bold text-white">{(settings.scanIntervalMs || 120000) / 60000}</span> : <input type="number" min="1" step="1" value={(settingsForm.scanIntervalMs || 120000) / 60000} onChange={e => setSettingsForm({ ...settingsForm, scanIntervalMs: Number(e.target.value) * 60000 })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />}
+            </div>
+          </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-5 text-xs text-slate-400">
-          <div><span className="text-slate-500">Min Funding</span><div className="mt-0.5 font-bold text-emerald-300">≥ 0.18%</div></div>
-          <div><span className="text-slate-500">Trade Size</span><div className="mt-0.5 font-bold text-emerald-300">$100–500 USDT</div></div>
-          <div><span className="text-slate-500">Max Slippage</span><div className="mt-0.5 font-bold text-emerald-300">0.05%</div></div>
-          <div><span className="text-slate-500">Max Perda/Dia</span><div className="mt-0.5 font-bold text-emerald-300">10 USDT (10% do size)</div></div>
-          <div><span className="text-slate-500">Cooldown</span><div className="mt-0.5 font-bold text-emerald-300">3 600 000 ms (1h)</div></div>
-        </div>
-      </div>
+      )}
 
       {/* Stats cards */}
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -752,7 +836,7 @@ export default function PerpetualArbPage() {
             )}
             {trades.map((trade) => {
               const statusInfo = STATUS_LABELS[trade.status] ?? { label: trade.status, cls: 'bg-slate-500/15 text-slate-300' };
-              const strategyName = typeof trade.strategyId === 'object' ? (trade.strategyId as any).name : null;
+              const strategyName = typeof trade.strategyId === 'object' && trade.strategyId !== null ? (trade.strategyId as any).name : null;
               return (
                 <div key={trade._id} className="rounded-xl border border-white/10 bg-slate-900 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
