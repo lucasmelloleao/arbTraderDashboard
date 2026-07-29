@@ -22,6 +22,118 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       perpSymbolFilter = `${base}/${quote}:USDT`; // default linear format for CCXT
     }
 
+    const spotExchangeParam = url.searchParams.get('spotExchange');
+    const perpExchangeParam = url.searchParams.get('perpExchange');
+
+    // ── Modo Cruzado Específico (Spot em uma CEX e Perp em outra CEX) ─────────
+    if (spotExchangeParam && perpExchangeParam && spotExchangeParam !== perpExchangeParam) {
+      const spotExId = spotExchangeParam.toLowerCase().trim();
+      const perpExId = perpExchangeParam.toLowerCase().trim();
+
+      const spotCcxtId = spotExId === 'gateio' ? 'gate' : spotExId;
+      const perpCcxtId = perpExId === 'gateio' ? 'gate' : perpExId;
+
+      if (!(ccxt as any)[spotCcxtId] || !(ccxt as any)[perpCcxtId]) {
+        throw new Error(`Corretoras ${spotExId} / ${perpExId} não suportadas`);
+      }
+
+      const spotExchange = new (ccxt as any)[spotCcxtId]({ enableRateLimit: true });
+      const perpExchange = new (ccxt as any)[perpCcxtId]({ enableRateLimit: true });
+
+      const withTimeout = (promise: Promise<any>, ms: number) => {
+        return Promise.race([
+          promise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms))
+        ]);
+      };
+
+      const [spotMarkets, perpMarkets] = await Promise.all([
+        withTimeout(spotExchange.loadMarkets(), 15000),
+        withTimeout(perpExchange.loadMarkets(), 15000)
+      ]);
+
+      let pSymbolsToFetch = isGlobalScan 
+        ? Object.keys(perpMarkets).filter(s => s.endsWith(':USDT')) 
+        : [perpSymbolFilter];
+
+      // Filtra pares Perp que também existem no mercado Spot da outra corretora
+      let validPairs: { pSym: string; sSym: string }[] = [];
+      for (const pSym of pSymbolsToFetch) {
+        const base = pSym.split('/')[0];
+        const quote = pSym.split('/')[1]?.split(':')[0] || 'USDT';
+        const sSym = `${base}/${quote}`;
+        if (spotMarkets[sSym] && perpMarkets[pSym]) {
+          validPairs.push({ pSym, sSym });
+        }
+      }
+
+      if (isGlobalScan) {
+        validPairs = validPairs.slice(0, 50); // limita para evitar rate-limit no scan global
+      }
+
+      const pSymbols = validPairs.map(v => v.pSym);
+      const sSymbols = Array.from(new Set(validPairs.map(v => v.sSym)));
+
+      const [pTickers, sTickers, fundingObj] = await Promise.all([
+        withTimeout(perpExchange.fetchTickers(pSymbols).catch(() => ({})), 15000),
+        withTimeout(spotExchange.fetchTickers(sSymbols).catch(() => ({})), 15000),
+        withTimeout((perpExchange.has['fetchFundingRates'] ? perpExchange.fetchFundingRates(pSymbols) : perpExchange.fetchFundingRate(pSymbols[0] || '').then((r: any) => ({ [(pSymbols[0] || '')]: r }))).catch(() => ({})), 15000)
+      ]);
+
+      const opps = [];
+      for (const pair of validPairs) {
+        const pTicker = pTickers[pair.pSym];
+        const sTicker = sTickers[pair.sSym];
+        if (!pTicker || !sTicker || !pTicker.last || !sTicker.last) continue;
+
+        let fundingRate = 0;
+        if (fundingObj[pair.pSym] && fundingObj[pair.pSym].fundingRate !== undefined) {
+          fundingRate = Number(fundingObj[pair.pSym].fundingRate);
+        } else if (pTicker.info) {
+          const rateStr = pTicker.info.fundingRate || pTicker.info.funding_rate || pTicker.info.lastFundingRate;
+          if (rateStr !== undefined) fundingRate = Number(rateStr);
+        }
+        if (!fundingRate || isNaN(fundingRate)) continue;
+
+        const fundingPct = fundingRate * 100;
+        const perpBid = pTicker.bid || pTicker.last;
+        const spotAsk = sTicker.ask || sTicker.last;
+        const spreadPct = spotAsk > 0 ? ((perpBid - spotAsk) / spotAsk) * 100 : 0;
+
+        const perpMarket = perpMarkets[pair.pSym];
+        const spotMarket = spotMarkets[pair.sSym];
+
+        const perpFee = perpMarket?.taker !== undefined ? perpMarket.taker : 0.0005; 
+        const spotFee = spotMarket?.taker !== undefined ? spotMarket.taker : 0.001; 
+        const totalFeePct = (perpFee + spotFee) * 100;
+        const netFundingPct = fundingPct + spreadPct - totalFeePct;
+
+        opps.push({
+          exchange: `${spotExId.toUpperCase()} (Spot) ⚡ ${perpExId.toUpperCase()} (Perp)`,
+          spotExchange: spotExId,
+          perpExchange: perpExId,
+          symbol: pair.pSym,
+          spotSymbol: pair.sSym,
+          perpBid,
+          spotAsk,
+          spreadPct,
+          fundingPct,
+          totalFeePct,
+          netFundingPct,
+          volume24h: pTicker.quoteVolume || sTicker.quoteVolume || 0,
+        });
+      }
+
+      opps.sort((a, b) => b.netFundingPct - a.netFundingPct);
+
+      return NextResponse.json({
+        symbol: isGlobalScan ? 'CROSS SCAN' : spotSymbolFilter,
+        results: isGlobalScan ? opps.slice(0, 20) : opps,
+        errors: 0,
+      });
+    }
+
+    // ── Modo Padrão (Busca na mesma corretora ou lista de corretoras) ─────────
     const exchangesParam = url.searchParams.get('exchanges');
     const targetExchanges = exchangesParam ? exchangesParam.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : EXCHANGES;
 
@@ -87,18 +199,12 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
           const fundingPct = fundingRate * 100;
           
-          // O robô real ignora sumariamente moedas com funding negativo ou zero
-          // Para não causar distorções na busca global, nós também ignoramos.
           if (isGlobalScan && fundingPct <= 0) continue;
 
           const perpBid = pTicker.bid || pTicker.last;
           const spotAsk = sTicker.ask || sTicker.last;
           const spreadPct = spotAsk > 0 ? ((perpBid - spotAsk) / spotAsk) * 100 : 0;
 
-          // Filtros Anti-Armadilha (Anti-Trap) para a Busca Global:
-          // 1. Exige pelo menos $150k de volume 24h para filtrar moedas zumbis.
-          // 2. Ignora spreads absurdos (> 3%) que são garantias de falta de liquidez no book.
-          // 3. Verifica liquidez notional imediata (no primeiro nível do book) para cortar moedas ilíquidas.
           const perpContractSize = perpMarket.contractSize || 1;
           const perpBidNotional = (pTicker.bidVolume || 0) * perpContractSize * perpBid;
           const spotAskNotional = (sTicker.askVolume || 0) * spotAsk;
@@ -106,7 +212,6 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           if (isGlobalScan) {
             if ((pTicker.quoteVolume || 0) < 150000) continue;
             if (spreadPct > 3) continue;
-            // Se a exchange fornece o bidVolume, ignora se tiver menos de $50 disponíveis no melhor preço
             if (pTicker.bidVolume && perpBidNotional < 50) continue;
             if (sTicker.askVolume && spotAskNotional < 50) continue;
           }
@@ -119,6 +224,8 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
           opps.push({
             exchange: exId.toUpperCase(),
+            spotExchange: exId,
+            perpExchange: exId,
             symbol: pSym,
             spotSymbol: sSym,
             perpBid,
@@ -138,11 +245,10 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     let successfulResults = results
       .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
       .flatMap(r => r.value)
-      // O usuário solicitou que o critério principal continue sendo o lucro líquido (Funding + Spread - Taxas)
       .sort((a, b) => b.netFundingPct - a.netFundingPct);
       
     if (isGlobalScan) {
-      successfulResults = successfulResults.slice(0, 20); // Retorna as 20 melhores se for global
+      successfulResults = successfulResults.slice(0, 20);
     }
 
     const failedResults = results

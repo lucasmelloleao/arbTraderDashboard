@@ -21,7 +21,9 @@ import {
   Building2,
   Link2,
   TimerReset,
-  Search
+  Search,
+  Power,
+  XCircle
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -79,6 +81,12 @@ function getToken(): string {
 }
 function authHeaders() {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` };
+}
+
+function getStrategyId(strategyId: any): string | null {
+  if (!strategyId) return null;
+  if (typeof strategyId === 'object') return strategyId._id || null;
+  return String(strategyId);
 }
 
 function msToDuration(ms: number): string {
@@ -545,8 +553,11 @@ const AVAILABLE_EXCHANGES = ['binance', 'bybit', 'okx', 'mexc', 'gateio', 'kucoi
 
 // ─── Manual Scan Modal ────────────────────────────────────────────────────────
 function ManualScanModal({ onClose, onCreateStrategy, exchangeKeys }: { onClose: () => void, onCreateStrategy: (data: any) => void, exchangeKeys: any[] }) {
+  const [scanMode, setScanMode] = useState<'same' | 'cross'>('same');
   const [symbol, setSymbol] = useState('');
   const [selectedExchanges, setSelectedExchanges] = useState<string[]>(['mexc']);
+  const [spotExchange, setSpotExchange] = useState<string>('mexc');
+  const [perpExchange, setPerpExchange] = useState<string>('binance');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
   const [errorCount, setErrorCount] = useState(0);
@@ -558,10 +569,15 @@ function ManualScanModal({ onClose, onCreateStrategy, exchangeKeys }: { onClose:
     setFetchError(null);
     setResults([]);
     try {
-      const queryExchanges = selectedExchanges.length > 0 ? selectedExchanges.join(',') : AVAILABLE_EXCHANGES.join(',');
-      const res = await fetch(`/api/perp-arb/manual-scan?symbol=${encodeURIComponent(symbol)}&exchanges=${queryExchanges}`, {
-        headers: authHeaders()
-      });
+      let url = '';
+      if (scanMode === 'cross') {
+        url = `/api/perp-arb/manual-scan?symbol=${encodeURIComponent(symbol)}&spotExchange=${spotExchange}&perpExchange=${perpExchange}`;
+      } else {
+        const queryExchanges = selectedExchanges.length > 0 ? selectedExchanges.join(',') : AVAILABLE_EXCHANGES.join(',');
+        url = `/api/perp-arb/manual-scan?symbol=${encodeURIComponent(symbol)}&exchanges=${queryExchanges}`;
+      }
+
+      const res = await fetch(url, { headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro na busca');
       setResults(data.results || []);
@@ -585,29 +601,95 @@ function ManualScanModal({ onClose, onCreateStrategy, exchangeKeys }: { onClose:
         </div>
 
         <div className="p-6 overflow-y-auto">
-          <div className="mb-4">
-            <label className="mb-2 block text-xs font-medium text-slate-400">Corretoras (Selecione onde buscar)</label>
-            <div className="flex flex-wrap gap-4">
-              {AVAILABLE_EXCHANGES.map(ex => (
-                <label key={ex} className="flex items-center gap-1.5 text-sm font-semibold text-slate-300 cursor-pointer hover:text-white transition-colors">
-                  <input
-                    type="checkbox"
-                    className="accent-indigo-500 w-4 h-4"
-                    checked={selectedExchanges.includes(ex)}
-                    onChange={(e) => {
-                      if (e.target.checked) setSelectedExchanges([...selectedExchanges, ex]);
-                      else setSelectedExchanges(selectedExchanges.filter(x => x !== ex));
-                    }}
-                  />
-                  {ex.toUpperCase()}
-                </label>
-              ))}
-            </div>
+          {/* Seletor de Modo de Busca */}
+          <div className="mb-5 flex gap-2 border-b border-white/10 pb-3">
+            <button
+              type="button"
+              onClick={() => setScanMode('same')}
+              className={`rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+                scanMode === 'same'
+                  ? 'bg-indigo-600 text-white shadow-[0_0_10px_rgba(79,70,229,0.4)]'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              Mesma Corretora (Single Exchange)
+            </button>
+            <button
+              type="button"
+              onClick={() => setScanMode('cross')}
+              className={`rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+                scanMode === 'cross'
+                  ? 'bg-cyan-600 text-white shadow-[0_0_10px_rgba(8,145,178,0.4)]'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              ⚡ Cruzamento de 2 Corretoras Diferentes (Cross-Exchange)
+            </button>
           </div>
+
+          {/* Configuração Modo Mesma Corretora */}
+          {scanMode === 'same' && (
+            <div className="mb-4">
+              <label className="mb-2 block text-xs font-medium text-slate-400">Corretoras (Selecione onde buscar)</label>
+              <div className="flex flex-wrap gap-4">
+                {AVAILABLE_EXCHANGES.map(ex => (
+                  <label key={ex} className="flex items-center gap-1.5 text-sm font-semibold text-slate-300 cursor-pointer hover:text-white transition-colors">
+                    <input
+                      type="checkbox"
+                      className="accent-indigo-500 w-4 h-4"
+                      checked={selectedExchanges.includes(ex)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedExchanges([...selectedExchanges, ex]);
+                        else setSelectedExchanges(selectedExchanges.filter(x => x !== ex));
+                      }}
+                    />
+                    {ex.toUpperCase()}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Configuração Modo Cruzado (Spot em uma + Perp em outra) */}
+          {scanMode === 'cross' && (
+            <div className="mb-4 rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4">
+              <p className="text-xs text-cyan-300 font-semibold mb-3 uppercase tracking-wider">Selecione o par de corretoras para cruzamento:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-300">
+                    🟢 Corretora Spot (Compra LONG)
+                  </label>
+                  <select
+                    value={spotExchange}
+                    onChange={(e) => setSpotExchange(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
+                  >
+                    {AVAILABLE_EXCHANGES.map(ex => (
+                      <option key={ex} value={ex}>{ex.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-300">
+                    🟣 Corretora Futuros / Perpétuo (Venda SHORT + Funding)
+                  </label>
+                  <select
+                    value={perpExchange}
+                    onChange={(e) => setPerpExchange(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
+                  >
+                    {AVAILABLE_EXCHANGES.map(ex => (
+                      <option key={ex} value={ex}>{ex.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleScan} className="flex items-end gap-4 mb-6">
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-medium text-slate-400">Moeda (Paridade Spot, ex: XRP/USDT). Deixe em branco para escanear TODO O MERCADO (Top 20).</label>
+              <label className="mb-1 block text-xs font-medium text-slate-400">Moeda (Paridade Spot, ex: XRP/USDT). Deixe em branco para escanear TODO O MERCADO.</label>
               <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())}
                 placeholder="Deixe em branco para Busca Global"
                 className="w-full rounded-lg border border-white/10 bg-slate-800 px-4 py-2.5 text-sm font-bold text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none" />
@@ -630,7 +712,7 @@ function ManualScanModal({ onClose, onCreateStrategy, exchangeKeys }: { onClose:
                 <thead className="border-b border-white/10 bg-slate-900/50 text-xs font-medium uppercase tracking-wider text-slate-400">
                   <tr>
                     <th className="px-4 py-3">Moeda</th>
-                    <th className="px-4 py-3">Corretora</th>
+                    <th className="px-4 py-3">Corretora(s)</th>
                     <th className="px-4 py-3">Vol 24h</th>
                     <th className="px-4 py-3">Spot Ask</th>
                     <th className="px-4 py-3">Perp Bid</th>
@@ -668,14 +750,18 @@ function ManualScanModal({ onClose, onCreateStrategy, exchangeKeys }: { onClose:
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => {
-                            const exKey = exchangeKeys.find(k => k.exchangeId.toLowerCase() === r.exchange.toLowerCase());
+                            const spotExName = r.spotExchange || r.exchange;
+                            const perpExName = r.perpExchange || r.exchange;
+                            const spotExKey = exchangeKeys.find(k => k.exchangeId.toLowerCase() === spotExName.toLowerCase());
+                            const perpExKey = exchangeKeys.find(k => k.exchangeId.toLowerCase() === perpExName.toLowerCase());
+
                             onCreateStrategy({
-                              name: `[SCAN ${r.exchange}] ${r.symbol}`,
+                              name: `[SCAN ${spotExName.toUpperCase()}/${perpExName.toUpperCase()}] ${r.symbol}`,
                               perpSymbol: r.symbol,
                               spotSymbol: r.spotSymbol,
                               minFundingRatePct: Math.max(0.001, Number(r.fundingPct.toFixed(4))),
-                              perpExchangeKeyId: { _id: exKey?._id || '' },
-                              spotExchangeKeyId: { _id: exKey?._id || '' },
+                              spotExchangeKeyId: { _id: spotExKey?._id || '' },
+                              perpExchangeKeyId: { _id: perpExKey?._id || '' },
                             });
                           }}
                           className="rounded-lg bg-indigo-600/20 px-3 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/40 hover:text-white transition-colors"
@@ -833,6 +919,29 @@ export default function PerpetualArbPage() {
       if (!res.ok) throw new Error('Falha ao limpar histórico');
       await fetchTrades();
     } catch (err: any) { setError(err.message); }
+  };
+
+  const closePosition = async (strategyId: string) => {
+    try {
+      const res = await fetch('/api/perp-arb/close', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ strategyId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao encerrar posição');
+      await fetchStrategies();
+      await fetchTrades();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleClosePosition = (s: PerpArbStrategy) => {
+    setConfirmState({
+      message: `Encerrar a posição de "${s.name}" agora? O robô irá fechar o Spot (Venda) e Perpétuo (Recompra Short) a mercado.`,
+      onConfirm: () => { closePosition(s._id); setConfirmState(null); },
+    });
   };
 
   useEffect(() => {
@@ -1081,13 +1190,13 @@ export default function PerpetualArbPage() {
             ) : (
               openPositions.map((s) => {
                 const openTrade = trades.find(t => 
-                  (typeof t.strategyId === 'object' ? t.strategyId._id : t.strategyId) === s._id && 
+                  getStrategyId(t.strategyId) === s._id && 
                   t.type === 'open_hedge' && 
                   (t.status === 'executed' || t.status === 'simulated')
                 );
 
                 const latestCheck = trades.find(t => 
-                  (typeof t.strategyId === 'object' ? t.strategyId._id : t.strategyId) === s._id && 
+                  getStrategyId(t.strategyId) === s._id && 
                   t.type === 'funding_check' &&
                   t.spotPrice !== undefined && t.perpPrice !== undefined
                 );
@@ -1125,9 +1234,18 @@ export default function PerpetualArbPage() {
                           </div>
                           <div className="text-xs text-gray-400 mt-0.5">{s.perpSymbol} / {s.spotSymbol}</div>
                         </div>
-                        <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-bold text-emerald-300 uppercase tracking-wider border border-emerald-500/30">
-                          Spot LONG + Perp SHORT
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-bold text-emerald-300 uppercase tracking-wider border border-emerald-500/30">
+                            Spot LONG + Perp SHORT
+                          </span>
+                          <button
+                            onClick={() => handleClosePosition(s)}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white px-3 py-1.5 text-xs font-bold shadow-[0_0_12px_rgba(220,38,38,0.4)] transition-all hover:scale-105"
+                            title="Encerrar posição a mercado imediatamente"
+                          >
+                            <Power className="h-3.5 w-3.5" /> Encerrar Agora
+                          </button>
+                        </div>
                       </div>
 
                       {/* Valor Atual da Operação (Resultado ao Encerrar Agora) */}
@@ -1209,9 +1327,28 @@ export default function PerpetualArbPage() {
                         </div>
                       </div>
 
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs text-gray-300">
-                        <div>Aberto em: <span className="text-slate-300">{s.positionOpenedAt ? new Date(s.positionOpenedAt).toLocaleString() : 'Recentemente'}</span></div>
-                        <div>Funding Rate Atual: <span className="font-semibold text-emerald-400">{s.currentFundingRate !== undefined && s.currentFundingRate !== null ? `${s.currentFundingRate.toFixed(4)}%` : '—'}</span></div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3 text-xs text-gray-300 border-t border-white/5 pt-2 font-sans">
+                        <div>Aberto em: <span className="text-slate-300 font-medium block sm:inline">{s.positionOpenedAt ? new Date(s.positionOpenedAt).toLocaleString() : 'Recentemente'}</span></div>
+                        <div>
+                          Funding na Abertura:{' '}
+                          <span className="font-semibold text-indigo-300 block sm:inline">
+                            {openTrade?.fundingPct !== undefined && openTrade?.fundingPct !== null
+                              ? `${openTrade.fundingPct.toFixed(4)}%`
+                              : openTrade?.fundingRate !== undefined && openTrade?.fundingRate !== null
+                              ? `${(openTrade.fundingRate * 100).toFixed(4)}%`
+                              : s.minFundingRatePct !== undefined && s.minFundingRatePct !== null
+                              ? `${s.minFundingRatePct.toFixed(4)}%`
+                              : s.currentFundingRate !== undefined && s.currentFundingRate !== null
+                              ? `${s.currentFundingRate.toFixed(4)}%`
+                              : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          Funding Rate Atual:{' '}
+                          <span className="font-semibold text-emerald-400 block sm:inline">
+                            {s.currentFundingRate !== undefined && s.currentFundingRate !== null ? `${s.currentFundingRate.toFixed(4)}%` : '—'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1223,7 +1360,7 @@ export default function PerpetualArbPage() {
 
         {/* Conteúdo da Aba Histórico Casadas */}
         {opTab === 'executed' && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             {marriedTrades.length === 0 ? (
               <div className="col-span-full rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">
                 Nenhuma operação casada executada ou simulada ainda.
@@ -1234,14 +1371,17 @@ export default function PerpetualArbPage() {
                 const strategyName = typeof trade.strategyId === 'object' && trade.strategyId !== null ? (trade.strategyId as any).name : null;
                 const isClose = trade.type === 'close_hedge';
                 const hasPnl = trade.pnl !== null && trade.pnl !== undefined;
-                const isProfit = hasPnl && Number(trade.pnl) >= 0;
+                const pnlVal = Number(trade.pnl || 0);
+                const isProfit = hasPnl && pnlVal >= 0;
+                const amount = trade.amount || 0;
+                const pnlPct = amount > 0 ? (pnlVal / amount) * 100 : 0;
 
                 return (
-                  <div key={trade._id} className={`rounded-xl border p-4 flex flex-col justify-between ${isClose ? (isProfit ? 'border-emerald-500/40 bg-emerald-950/20' : 'border-red-500/40 bg-red-950/20') : 'border-white/10 bg-slate-900'}`}>
+                  <div key={trade._id} className={`rounded-xl border p-5 flex flex-col justify-between shadow-lg ${isClose ? (isProfit ? 'border-emerald-500/40 bg-emerald-950/20' : 'border-red-500/40 bg-red-950/20') : 'border-indigo-500/30 bg-slate-900'}`}>
                     <div>
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <div className="text-sm font-bold text-white flex items-center gap-2">
+                          <div className="text-base font-bold text-white flex items-center gap-2">
                             {isClose ? (
                               <span className="px-2.5 py-1 rounded-md text-[11px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider">
                                 🏁 ENCERRAMENTO (FECHAMENTO)
@@ -1251,30 +1391,85 @@ export default function PerpetualArbPage() {
                                 🟢 ABERTURA (HEDGE)
                               </span>
                             )}
-                            {strategyName && <span className="text-xs text-slate-300">({strategyName})</span>}
                           </div>
-                          <div className="text-xs text-gray-400 mt-1">{new Date(trade.createdAt).toLocaleString()}</div>
+                          {strategyName && <div className="text-xs font-semibold text-indigo-300 mt-1">{strategyName}</div>}
                         </div>
                         <span className={`rounded-full px-2.5 py-0.5 text-[11px] uppercase tracking-[0.15em] font-semibold ${statusInfo.cls}`}>{statusInfo.label}</span>
                       </div>
 
-                      {/* Bloco de Resultado para Fechamento / PnL Realizado */}
-                      {isClose && (
-                        <div className={`mt-3.5 rounded-lg border p-3 ${isProfit ? 'bg-emerald-900/40 border-emerald-500/30' : 'bg-red-900/40 border-red-500/30'}`}>
-                          <div className="text-xs font-semibold text-gray-300 mb-0.5">Resultado Final da Operação:</div>
-                          <div className={`text-lg font-black flex items-center gap-1.5 ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {isProfit ? '🟢 LUCRO REALIZADO:' : '🔴 PREJUÍZO REALIZADO:'} {isProfit ? '+' : ''}${Number(trade.pnl || 0).toFixed(4)} USDT
+                      {/* Bloco Destaque de Resultado / PnL Realizado da Execução */}
+                      <div className="mt-4 rounded-lg bg-slate-950/90 border border-white/10 p-3.5">
+                        <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                          <span>{isClose ? 'Resultado Final de Encerramento:' : 'Tamanho da Posição Executada:'}</span>
+                          <span className="font-semibold text-slate-300">Aporte: ${amount.toFixed(2)} USDT</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <div className="text-2xl font-extrabold text-white">
+                            ${(amount + (hasPnl ? pnlVal : 0)).toFixed(2)} <span className="text-xs font-normal text-slate-400">USDT</span>
+                          </div>
+                          {hasPnl ? (
+                            <div className={`text-sm font-bold flex items-center gap-1 ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {isProfit ? '+' : ''}${pnlVal.toFixed(4)} ({isProfit ? '+' : ''}{pnlPct.toFixed(2)}%)
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-400 font-mono">Em andamento</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Decomposição Completa de Preços de Cada Perna */}
+                      <div className="mt-3 space-y-2 rounded-lg bg-slate-950/90 border border-white/10 p-3 text-xs">
+                        <div className="font-semibold text-slate-300 border-b border-white/5 pb-1 flex justify-between">
+                          <span>Execução por Perna:</span>
+                          <span className="text-[10px] text-gray-400 font-normal">Preços Registrados</span>
+                        </div>
+
+                        {/* Perna 1: Spot LONG */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-gray-300">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              Spot (LONG)
+                            </span>
+                            <span className="text-slate-400">Preço Ordem:</span>
+                          </div>
+                          <div className="font-mono font-bold text-slate-200">
+                            {trade.spotPrice !== undefined ? `$${trade.spotPrice.toLocaleString()}` : '—'}
                           </div>
                         </div>
-                      )}
 
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs text-gray-400 border-t border-white/5 pt-2.5">
-                        <div>Preço Spot: <span className="text-slate-200 font-medium">{trade.spotPrice !== undefined ? `$${trade.spotPrice.toLocaleString()}` : 'n/a'}</span></div>
-                        <div>Preço Perp: <span className="text-slate-200 font-medium">{trade.perpPrice !== undefined ? `$${trade.perpPrice.toLocaleString()}` : 'n/a'}</span></div>
-                        <div>Montante HFT: <span className="text-slate-200 font-medium">{trade.amount} USDT</span></div>
-                        {!isClose && hasPnl && (
-                          <div>P&amp;L Acumulado: <span className={`font-bold ${Number(trade.pnl) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{Number(trade.pnl) >= 0 ? '+' : ''}${Number(trade.pnl).toFixed(4)} USDT</span></div>
+                        {/* Perna 2: Perp SHORT */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-gray-300">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              Perpétuo (SHORT)
+                            </span>
+                            <span className="text-slate-400">Preço Ordem:</span>
+                          </div>
+                          <div className="font-mono font-bold text-slate-200">
+                            {trade.perpPrice !== undefined ? `$${trade.perpPrice.toLocaleString()}` : '—'}
+                          </div>
+                        </div>
+
+                        {/* Funding associado na execução */}
+                        {trade.fundingPct !== undefined && trade.fundingPct !== null && (
+                          <div className="flex items-center justify-between border-t border-white/5 pt-1.5">
+                            <div className="flex items-center gap-1.5 text-gray-300">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                🌾 Funding Rate
+                              </span>
+                              <span className="text-slate-400 text-[11px]">Taxa do Momento</span>
+                            </div>
+                            <div className="font-mono font-bold text-cyan-300">
+                              {trade.fundingPct >= 0 ? '+' : ''}{trade.fundingPct.toFixed(4)}%
+                            </div>
+                          </div>
                         )}
+                      </div>
+
+                      {/* Footer Info (Data e ID) */}
+                      <div className="mt-3 flex items-center justify-between text-xs text-gray-400 border-t border-white/5 pt-2">
+                        <div>Data: <span className="text-slate-300">{new Date(trade.createdAt).toLocaleString()}</span></div>
+                        {trade._id && <div className="text-[10px] text-slate-500 font-mono">ID: #{trade._id.slice(-6)}</div>}
                       </div>
                     </div>
                   </div>
