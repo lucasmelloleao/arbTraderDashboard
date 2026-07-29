@@ -20,6 +20,8 @@ import {
   Pencil,
   Building2,
   Link2,
+  TimerReset,
+  Search
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +40,7 @@ type PerpArbStrategy = {
   tradeSize: number;
   minFundingRatePct: number;
   maxSlippagePct: number;
+  closeThresholdPct?: number;
   maxDailyLoss: number;
   cooldownAfterLossMs: number;
   autoExecute: boolean;
@@ -47,6 +50,12 @@ type PerpArbStrategy = {
   lastLossAt?: string | null;
   perpExchangeKeyId?: { _id: string; name: string; exchangeId: string } | null;
   spotExchangeKeyId?: { _id: string; name: string; exchangeId: string } | null;
+  positionOpen?: boolean;
+  positionSize?: number;
+  positionOpenedAt?: string | null;
+  fundingCollected?: number;
+  lastSpotPrice?: number | null;
+  lastPerpPrice?: number | null;
 };
 
 type PerpArbTrade = {
@@ -123,6 +132,7 @@ type StrategyFormData = {
   tradeSize: string;
   minFundingRatePct: string;
   maxSlippagePct: string;
+  closeThresholdPct: string;
   maxDailyLoss: string;
   cooldownAfterLossMs: string;
   perpExchangeKeyId: string;
@@ -136,6 +146,7 @@ const IDEAL_DEFAULTS: StrategyFormData = {
   tradeSize: '100',
   minFundingRatePct: '0.18',
   maxSlippagePct: '0.05',
+  closeThresholdPct: '0.3',
   maxDailyLoss: '10',
   cooldownAfterLossMs: '3600000',
   perpExchangeKeyId: '',
@@ -158,6 +169,7 @@ function StrategyFormModal({ initial, onClose, onSaved, mode, exchangeKeys }: {
           tradeSize: String(initial.tradeSize),
           minFundingRatePct: String(initial.minFundingRatePct),
           maxSlippagePct: String(initial.maxSlippagePct ?? 0.05),
+          closeThresholdPct: String(initial.closeThresholdPct ?? 0.3),
           maxDailyLoss: String(initial.maxDailyLoss ?? 10),
           cooldownAfterLossMs: String(initial.cooldownAfterLossMs ?? 3600000),
           perpExchangeKeyId: initial.perpExchangeKeyId?._id ?? '',
@@ -183,6 +195,7 @@ function StrategyFormModal({ initial, onClose, onSaved, mode, exchangeKeys }: {
         tradeSize: Number(form.tradeSize),
         minFundingRatePct: Number(form.minFundingRatePct),
         maxSlippagePct: Number(form.maxSlippagePct),
+        closeThresholdPct: Number(form.closeThresholdPct),
         maxDailyLoss: Number(form.maxDailyLoss),
         cooldownAfterLossMs: Number(form.cooldownAfterLossMs),
         perpExchangeKeyId: form.perpExchangeKeyId || null,
@@ -318,6 +331,15 @@ function StrategyFormModal({ initial, onClose, onSaved, mode, exchangeKeys }: {
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Campos de proteção</p>
             </div>
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-400">
+                  Alvo de Spread (Fechamento) (%)
+                  <span className="ml-1 text-emerald-400">ideal: 0.3</span>
+                </label>
+                <input required type="number" step="0.001" value={form.closeThresholdPct} onChange={(e) => f('closeThresholdPct', e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none" />
+                <p className="mt-1 text-[11px] text-slate-500">Lucro mínimo (diferença entre Spot e Perp) para o robô fechar a operação automaticamente.</p>
+              </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-400">
                   Max Slippage (%)
@@ -493,6 +515,15 @@ function StrategyCard({ strategy, onUpdate, onDelete, onEdit }: {
         >
           {strategy.active ? <><Pause className="h-4 w-4" /> Pausar</> : <><Play className="h-4 w-4" /> Retomar</>}
         </button>
+        {cdStatus.active && (
+          <button
+            onClick={() => onUpdate({ _id: strategy._id, resetCooldown: true } as any)}
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-600/80 px-3 py-2 text-sm text-white hover:bg-amber-500 transition-colors"
+            title="Resetar Cooldown"
+          >
+            <TimerReset className="h-4 w-4" /> Resetar Cooldown
+          </button>
+        )}
         <button
           onClick={() => onEdit(strategy)}
           className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
@@ -510,6 +541,173 @@ function StrategyCard({ strategy, onUpdate, onDelete, onEdit }: {
   );
 }
 
+const AVAILABLE_EXCHANGES = ['binance', 'bybit', 'okx', 'mexc', 'gateio', 'kucoin', 'huobi', 'bitget'];
+
+// ─── Manual Scan Modal ────────────────────────────────────────────────────────
+function ManualScanModal({ onClose, onCreateStrategy, exchangeKeys }: { onClose: () => void, onCreateStrategy: (data: any) => void, exchangeKeys: any[] }) {
+  const [symbol, setSymbol] = useState('');
+  const [selectedExchanges, setSelectedExchanges] = useState<string[]>(['mexc']);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
+  const [errorCount, setErrorCount] = useState(0);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const handleScan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setFetchError(null);
+    setResults([]);
+    try {
+      const queryExchanges = selectedExchanges.length > 0 ? selectedExchanges.join(',') : AVAILABLE_EXCHANGES.join(',');
+      const res = await fetch(`/api/perp-arb/manual-scan?symbol=${encodeURIComponent(symbol)}&exchanges=${queryExchanges}`, {
+        headers: authHeaders()
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro na busca');
+      setResults(data.results || []);
+      setErrorCount(data.errors || 0);
+    } catch (err: any) {
+      setFetchError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-6xl rounded-2xl border border-white/10 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between border-b border-white/10 bg-slate-900 px-6 py-4 shrink-0">
+          <div className="flex items-center gap-2">
+            <Search className="h-5 w-5 text-indigo-400" />
+            <h2 className="text-lg font-semibold text-white">Busca Manual Cross-Exchange</h2>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"><X className="h-5 w-5" /></button>
+        </div>
+
+        <div className="p-6 overflow-y-auto">
+          <div className="mb-4">
+            <label className="mb-2 block text-xs font-medium text-slate-400">Corretoras (Selecione onde buscar)</label>
+            <div className="flex flex-wrap gap-4">
+              {AVAILABLE_EXCHANGES.map(ex => (
+                <label key={ex} className="flex items-center gap-1.5 text-sm font-semibold text-slate-300 cursor-pointer hover:text-white transition-colors">
+                  <input
+                    type="checkbox"
+                    className="accent-indigo-500 w-4 h-4"
+                    checked={selectedExchanges.includes(ex)}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedExchanges([...selectedExchanges, ex]);
+                      else setSelectedExchanges(selectedExchanges.filter(x => x !== ex));
+                    }}
+                  />
+                  {ex.toUpperCase()}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <form onSubmit={handleScan} className="flex items-end gap-4 mb-6">
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-medium text-slate-400">Moeda (Paridade Spot, ex: XRP/USDT). Deixe em branco para escanear TODO O MERCADO (Top 20).</label>
+              <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                placeholder="Deixe em branco para Busca Global"
+                className="w-full rounded-lg border border-white/10 bg-slate-800 px-4 py-2.5 text-sm font-bold text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none" />
+            </div>
+            <button disabled={loading} type="submit" className="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors flex items-center gap-2 shrink-0">
+              {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              {loading ? 'Buscando...' : 'Escanear Mercado'}
+            </button>
+          </form>
+
+          {fetchError && (
+            <div className="mb-4 rounded-lg border border-red-600 bg-red-950/50 p-3 text-sm text-red-200">
+              {fetchError}
+            </div>
+          )}
+
+          {results.length > 0 && (
+            <div className="rounded-xl border border-white/10 bg-slate-950/50 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-white/10 bg-slate-900/50 text-xs font-medium uppercase tracking-wider text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3">Moeda</th>
+                    <th className="px-4 py-3">Corretora</th>
+                    <th className="px-4 py-3">Vol 24h</th>
+                    <th className="px-4 py-3">Spot Ask</th>
+                    <th className="px-4 py-3">Perp Bid</th>
+                    <th className="px-4 py-3">Spread (Backwd)</th>
+                    <th className="px-4 py-3">Funding Rate</th>
+                    <th className="px-4 py-3">Taxas Taker</th>
+                    <th className="px-4 py-3">Lucro Líquido</th>
+                    <th className="px-4 py-3 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {results.map((r, i) => (
+                    <tr key={i} className="hover:bg-white/[0.02]">
+                      <td className="px-4 py-3 font-bold text-indigo-400">{r.symbol || r.spotSymbol || symbol}</td>
+                      <td className="px-4 py-3 font-bold text-white">{r.exchange}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs">
+                        {r.volume24h > 1000000 
+                          ? `$${(r.volume24h / 1000000).toFixed(2)}M` 
+                          : `$${(r.volume24h / 1000).toFixed(1)}k`}
+                      </td>
+                      <td className="px-4 py-3 text-slate-300">{r.spotAsk}</td>
+                      <td className="px-4 py-3 text-slate-300">{r.perpBid}</td>
+                      <td className={`px-4 py-3 font-semibold ${r.spreadPct < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {r.spreadPct > 0 ? '+' : ''}{r.spreadPct.toFixed(4)}%
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-emerald-400">
+                        {r.fundingPct.toFixed(4)}%
+                      </td>
+                      <td className="px-4 py-3 text-red-400 font-medium">
+                        -{r.totalFeePct.toFixed(4)}%
+                      </td>
+                      <td className={`px-4 py-3 font-bold ${r.netFundingPct > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {r.netFundingPct > 0 ? '+' : ''}{r.netFundingPct.toFixed(4)}%
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => {
+                            const exKey = exchangeKeys.find(k => k.exchangeId.toLowerCase() === r.exchange.toLowerCase());
+                            onCreateStrategy({
+                              name: `[SCAN ${r.exchange}] ${r.symbol}`,
+                              perpSymbol: r.symbol,
+                              spotSymbol: r.spotSymbol,
+                              minFundingRatePct: Math.max(0.001, Number(r.fundingPct.toFixed(4))),
+                              perpExchangeKeyId: { _id: exKey?._id || '' },
+                              spotExchangeKeyId: { _id: exKey?._id || '' },
+                            });
+                          }}
+                          className="rounded-lg bg-indigo-600/20 px-3 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/40 hover:text-white transition-colors"
+                        >
+                          Criar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {errorCount > 0 && (
+                <div className="px-4 py-2 bg-slate-900/50 border-t border-white/10 text-xs text-slate-500 text-right">
+                  * {errorCount} corretora(s) falharam ao retornar dados (timeout ou não suportado). As taxas (fees) exibidas são estimativas padrões públicas (Taker).
+                </div>
+              )}
+            </div>
+          )}
+          
+          {!loading && results.length === 0 && !fetchError && (
+             <div className="text-center py-10 text-slate-500 text-sm">
+                Nenhum resultado ainda. Digite a moeda acima e clique em Escanear.
+             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PerpetualArbPage() {
@@ -519,7 +717,10 @@ export default function PerpetualArbPage() {
   const [loadingTrades, setLoadingTrades] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [opTab, setOpTab] = useState<'open' | 'executed'>('open');
+
   const [showForm, setShowForm] = useState<{ mode: 'create' | 'edit'; strategy?: PerpArbStrategy } | null>(null);
+  const [showManualScan, setShowManualScan] = useState(false);
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [exchangeKeys, setExchangeKeys] = useState<ExchangeKey[]>([]);
 
@@ -533,6 +734,10 @@ export default function PerpetualArbPage() {
   const totalPnl = trades.reduce((acc, t) => acc + (t.pnl ?? 0), 0);
   const executedCount = trades.filter((t) => t.status === 'executed').length;
   const activeCount = strategies.filter((s) => s.active).length;
+
+  const openPositions = strategies.filter((s) => s.positionOpen);
+  const marriedTrades = trades.filter((t) => t.type === 'open_hedge' || t.type === 'close_hedge' || t.status === 'executed' || t.status === 'simulated');
+  const intentionTrades = trades.filter((t) => t.type === 'funding_check' || t.status === 'detected' || t.status === 'skipped' || t.status === 'failed');
 
   // ── Fetchers ───────────────────────────────────────────────────────────────
   const fetchStrategies = async () => {
@@ -587,11 +792,7 @@ export default function PerpetualArbPage() {
       if (res.ok) {
         const data = await res.json();
         const isOnline = await fetchBotStatus();
-        if (!isOnline && data.isScanningEnabled) {
-          updateSettings({ isScanningEnabled: false });
-        } else {
-          setSettings(data);
-        }
+        setSettings(data);
       }
     } catch { /* silent */ }
     finally { setLoadingSettings(false); }
@@ -680,6 +881,16 @@ export default function PerpetualArbPage() {
           exchangeKeys={exchangeKeys}
         />
       )}
+      {showManualScan && (
+        <ManualScanModal
+          onClose={() => setShowManualScan(false)}
+          exchangeKeys={exchangeKeys}
+          onCreateStrategy={(prefilled) => {
+            setShowManualScan(false);
+            setShowForm({ mode: 'create', strategy: prefilled as any });
+          }}
+        />
+      )}
 
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -688,6 +899,18 @@ export default function PerpetualArbPage() {
           <p className="mt-1 text-sm text-gray-400">Arbitragem de funding rate entre mercados perpétuos e spot.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowForm({ mode: 'create' })}
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-bold text-white transition-colors"
+          >
+            <Plus className="h-4 w-4" /> Nova Estratégia
+          </button>
+          <button
+            onClick={() => setShowManualScan(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-bold text-white transition-colors"
+          >
+            <Search className="h-4 w-4" /> Busca Manual
+          </button>
           {settings && (
             <button
               disabled={!botOnline}
@@ -759,6 +982,39 @@ export default function PerpetualArbPage() {
               <span className="block text-xs text-slate-500 mb-1">Ciclo de Scan (Minutos)</span>
               {!isEditingSettings ? <span className="font-bold text-white">{(settings.scanIntervalMs || 120000) / 60000}</span> : <input type="number" min="1" step="1" value={(settingsForm.scanIntervalMs || 120000) / 60000} onChange={e => setSettingsForm({ ...settingsForm, scanIntervalMs: Number(e.target.value) * 60000 })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />}
             </div>
+            
+            <div className="sm:col-span-6 border-t border-white/10 pt-4 mt-2">
+              <span className="block text-xs text-slate-500 mb-2">Corretoras Pescadas</span>
+              {!isEditingSettings ? (
+                <div className="flex gap-2">
+                  {settings.allowedExchanges?.length > 0 ? settings.allowedExchanges.map((ex: string) => (
+                    <span key={ex} className="px-2 py-1 bg-indigo-500/20 text-indigo-300 font-semibold rounded text-xs">{ex.toUpperCase()}</span>
+                  )) : <span className="text-gray-500 text-xs italic">Todas as cadastradas</span>}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-4">
+                  {exchangeKeys.length === 0 ? <span className="text-gray-500 text-xs italic">Nenhuma corretora cadastrada</span> : Array.from(new Set(exchangeKeys.map(ek => ek.exchangeId))).map(ex => {
+                    const isChecked = settingsForm.allowedExchanges ? settingsForm.allowedExchanges.includes(ex) : false;
+                    return (
+                      <label key={ex} className="flex items-center gap-2 text-slate-200 text-sm cursor-pointer hover:text-white transition-colors">
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          onChange={(e) => {
+                            let curr = settingsForm.allowedExchanges || [];
+                            if (e.target.checked && !curr.includes(ex)) curr = [...curr, ex];
+                            else if (!e.target.checked) curr = curr.filter((a: string) => a !== ex);
+                            setSettingsForm({ ...settingsForm, allowedExchanges: curr });
+                          }}
+                          className="h-4 w-4 rounded border-white/20 bg-slate-900 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900"
+                        />
+                        {ex.toUpperCase()}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -784,91 +1040,332 @@ export default function PerpetualArbPage() {
         </div>
       </div>
 
-      {/* Main grid */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        {/* Strategies */}
-        <div className="rounded-xl border border-white/10 bg-slate-950/70 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Estratégias</h2>
-              <p className="text-sm text-gray-400">Gerencie limites e proteções.</p>
-            </div>
-            <span className="rounded-full bg-slate-800 px-3 py-1 text-xs uppercase tracking-[0.16em] text-gray-300">{strategies.length} estratégias</span>
-          </div>
-          <div className="space-y-4">
-            {loadingStrategies && strategies.length === 0 && <div className="text-sm text-gray-400">Carregando...</div>}
-            {!loadingStrategies && strategies.length === 0 && (
-              <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">
-                Nenhuma estratégia.{' '}
-                <button onClick={() => setShowForm({ mode: 'create' })} className="text-indigo-400 underline hover:text-indigo-300">Criar agora</button>
-              </div>
-            )}
-            {strategies.map((s) => (
-              <StrategyCard
-                key={s._id}
-                strategy={s}
-                onUpdate={(upd) => handleUpdateWithConfirm(upd, s)}
-                onDelete={handleDelete}
-                onEdit={(strat) => setShowForm({ mode: 'edit', strategy: strat })}
-              />
-            ))}
-          </div>
+      {/* Quadro 1 (ACIMA DAS ESTRATÉGIAS, OCUPANDO A TELA TODA): Operações Realizadas e em Aberto */}
+      <div className="mt-6 rounded-xl border border-white/10 bg-slate-950/70 p-5">
+        <div className="mb-4 flex flex-col gap-1">
+          <h2 className="text-lg font-semibold text-white">Operações Realizadas e em Aberto</h2>
+          <p className="text-sm text-gray-400">Operações casadas (Spot LONG + Perp SHORT) ativas e histórico de execuções.</p>
         </div>
 
-        {/* Trades */}
-        <div className="rounded-xl border border-white/10 bg-slate-950/70 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Histórico de Intenções</h2>
-              <p className="text-sm text-gray-400">Oportunidades detectadas e executadas.</p>
-            </div>
-            {trades.length > 0 && (
-              <button onClick={handleClearTrades}
-                className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-red-300 transition-colors">
-                <Trash2 className="h-3.5 w-3.5" /> Limpar
-              </button>
-            )}
-          </div>
-          <div className="space-y-3">
-            {loadingTrades && trades.length === 0 && <div className="text-sm text-gray-400">Carregando...</div>}
-            {!loadingTrades && trades.length === 0 && (
-              <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">Nenhum trade encontrado.</div>
-            )}
-            {trades.map((trade) => {
-              const statusInfo = STATUS_LABELS[trade.status] ?? { label: trade.status, cls: 'bg-slate-500/15 text-slate-300' };
-              const strategyName = typeof trade.strategyId === 'object' && trade.strategyId !== null ? (trade.strategyId as any).name : null;
-              return (
-                <div key={trade._id} className="rounded-xl border border-white/10 bg-slate-900 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* Sub-Abas */}
+        <div className="mb-4 flex gap-2 border-b border-white/10 pb-3">
+          <button
+            onClick={() => setOpTab('open')}
+            className={`rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+              opTab === 'open'
+                ? 'bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Em Aberto ({openPositions.length})
+          </button>
+          <button
+            onClick={() => setOpTab('executed')}
+            className={`rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+              opTab === 'executed'
+                ? 'bg-indigo-600 text-white shadow-[0_0_10px_rgba(79,70,229,0.4)]'
+                : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Histórico Casadas ({marriedTrades.length})
+          </button>
+        </div>
+
+        {/* Conteúdo da Aba Em Aberto */}
+        {opTab === 'open' && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {openPositions.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">
+                Nenhuma posição casada aberta no momento.
+              </div>
+            ) : (
+              openPositions.map((s) => {
+                const openTrade = trades.find(t => 
+                  (typeof t.strategyId === 'object' ? t.strategyId._id : t.strategyId) === s._id && 
+                  t.type === 'open_hedge' && 
+                  (t.status === 'executed' || t.status === 'simulated')
+                );
+
+                const latestCheck = trades.find(t => 
+                  (typeof t.strategyId === 'object' ? t.strategyId._id : t.strategyId) === s._id && 
+                  t.type === 'funding_check' &&
+                  t.spotPrice !== undefined && t.perpPrice !== undefined
+                );
+
+                const entrySpot = openTrade?.spotPrice;
+                const entryPerp = openTrade?.perpPrice;
+                const currentSpot = s.lastSpotPrice || latestCheck?.spotPrice || entrySpot;
+                const currentPerp = s.lastPerpPrice || latestCheck?.perpPrice || entryPerp;
+
+                const positionSize = s.positionSize || s.tradeSize;
+                const fundingCollected = s.fundingCollected || 0;
+
+                let spotPnL = 0;
+                let perpPnL = 0;
+                if (entrySpot && currentSpot) {
+                  spotPnL = ((currentSpot - entrySpot) / entrySpot) * positionSize;
+                }
+                if (entryPerp && currentPerp) {
+                  perpPnL = ((entryPerp - currentPerp) / entryPerp) * positionSize;
+                }
+
+                const marketPnL = spotPnL + perpPnL;
+                const totalUnrealizedPnL = marketPnL + fundingCollected;
+                const estimatedExitValue = positionSize + totalUnrealizedPnL;
+                const unrealizedPct = positionSize > 0 ? (totalUnrealizedPnL / positionSize) * 100 : 0;
+
+                return (
+                  <div key={s._id} className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-5 flex flex-col justify-between shadow-lg">
                     <div>
-                      <div className="text-sm font-semibold text-slate-100">
-                        {trade.type.replace(/_/g, ' ').toUpperCase()}
-                        {strategyName && <span className="ml-2 text-xs font-normal text-slate-400">({strategyName})</span>}
-                      </div>
-                      <div className="text-xs text-gray-500">{new Date(trade.createdAt).toLocaleString()}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-[0.15em] ${statusInfo.cls}`}>{statusInfo.label}</span>
-                      {trade.fundingPct !== undefined && trade.fundingPct !== null && (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${trade.fundingPct >= 0 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
-                          {trade.fundingPct >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-                          {trade.fundingPct.toFixed(4)}%
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="text-base font-bold text-white flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                            {s.name}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5">{s.perpSymbol} / {s.spotSymbol}</div>
+                        </div>
+                        <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-bold text-emerald-300 uppercase tracking-wider border border-emerald-500/30">
+                          Spot LONG + Perp SHORT
                         </span>
-                      )}
+                      </div>
+
+                      {/* Valor Atual da Operação (Resultado ao Encerrar Agora) */}
+                      <div className="mt-4 rounded-lg bg-slate-900/90 border border-emerald-500/20 p-3.5">
+                        <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                          <span>Valor Atual de Encerramento:</span>
+                          <span className="font-semibold text-slate-300">Aporte: ${positionSize.toFixed(2)} USDT</span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <div className="text-2xl font-extrabold text-white">
+                            ${estimatedExitValue.toFixed(2)} <span className="text-xs font-normal text-slate-400">USDT</span>
+                          </div>
+                          <div className={`text-sm font-bold flex items-center gap-1 ${totalUnrealizedPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {totalUnrealizedPnL >= 0 ? '+' : ''}${totalUnrealizedPnL.toFixed(2)} ({totalUnrealizedPnL >= 0 ? '+' : ''}{unrealizedPct.toFixed(2)}%)
+                          </div>
+                        </div>
+                        
+                        {/* Detalhamento Sintético */}
+                        <div className="mt-2.5 pt-2 border-t border-white/5 grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="text-gray-400">
+                            Variação Mercado (Spot+Perp):{' '}
+                            <span className={marketPnL >= 0 ? 'text-emerald-300 font-medium' : 'text-red-300 font-medium'}>
+                              {marketPnL >= 0 ? '+' : ''}${marketPnL.toFixed(4)}
+                            </span>
+                          </div>
+                          <div className="text-gray-400 text-right">
+                            Funding Coletado:{' '}
+                            <span className="text-cyan-300 font-medium">
+                              +${fundingCollected.toFixed(4)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Decomposição Explícita por Perna (Onde está o Lucro e o Prejuízo) */}
+                      <div className="mt-3 space-y-2 rounded-lg bg-slate-900/90 border border-white/10 p-3 text-xs">
+                        <div className="font-semibold text-slate-300 border-b border-white/5 pb-1 flex justify-between">
+                          <span>Resultado de Cada Perna:</span>
+                          <span className="text-[10px] text-gray-400 font-normal">Hedge 1X (Delta Neutro)</span>
+                        </div>
+
+                        {/* Perna 1: Spot LONG */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-gray-300">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              Spot (LONG)
+                            </span>
+                            {entrySpot && <span className="text-slate-400 font-mono text-[11px]">${entrySpot} → ${currentSpot || entrySpot}</span>}
+                          </div>
+                          <div className={`font-mono font-bold ${spotPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {spotPnL >= 0 ? '+' : ''}${spotPnL.toFixed(4)} USDT
+                          </div>
+                        </div>
+
+                        {/* Perna 2: Perp SHORT */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-gray-300">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              Perpétuo (SHORT)
+                            </span>
+                            {entryPerp && <span className="text-slate-400 font-mono text-[11px]">${entryPerp} → ${currentPerp || entryPerp}</span>}
+                          </div>
+                          <div className={`font-mono font-bold ${perpPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {perpPnL >= 0 ? '+' : ''}${perpPnL.toFixed(4)} USDT
+                          </div>
+                        </div>
+
+                        {/* Perna 3: Funding Coletado */}
+                        <div className="flex items-center justify-between border-t border-white/5 pt-1.5">
+                          <div className="flex items-center gap-1.5 text-gray-300">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                              🌾 Funding (8h)
+                            </span>
+                            <span className="text-slate-400 text-[11px]">Pagamento Corretora</span>
+                          </div>
+                          <div className="font-mono font-bold text-cyan-300">
+                            +${fundingCollected.toFixed(4)} USDT
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs text-gray-300">
+                        <div>Aberto em: <span className="text-slate-300">{s.positionOpenedAt ? new Date(s.positionOpenedAt).toLocaleString() : 'Recentemente'}</span></div>
+                        <div>Funding Rate Atual: <span className="font-semibold text-emerald-400">{s.currentFundingRate !== undefined && s.currentFundingRate !== null ? `${s.currentFundingRate.toFixed(4)}%` : '—'}</span></div>
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 text-sm text-gray-400">
-                    <div>Spot: <span className="text-slate-200">{trade.spotPrice !== undefined ? `$${trade.spotPrice.toLocaleString()}` : 'n/a'}</span></div>
-                    <div>Perp: <span className="text-slate-200">{trade.perpPrice !== undefined ? `$${trade.perpPrice.toLocaleString()}` : 'n/a'}</span></div>
-                    <div>Amount: <span className="text-slate-200">{trade.amount} USDT</span></div>
-                    {trade.pnl !== null && trade.pnl !== undefined && (
-                      <div>P&amp;L: <span className={`font-semibold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(4)} USDT</span></div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
+        )}
+
+        {/* Conteúdo da Aba Histórico Casadas */}
+        {opTab === 'executed' && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {marriedTrades.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">
+                Nenhuma operação casada executada ou simulada ainda.
+              </div>
+            ) : (
+              marriedTrades.map((trade) => {
+                const statusInfo = STATUS_LABELS[trade.status] ?? { label: trade.status, cls: 'bg-slate-500/15 text-slate-300' };
+                const strategyName = typeof trade.strategyId === 'object' && trade.strategyId !== null ? (trade.strategyId as any).name : null;
+                const isClose = trade.type === 'close_hedge';
+                const hasPnl = trade.pnl !== null && trade.pnl !== undefined;
+                const isProfit = hasPnl && Number(trade.pnl) >= 0;
+
+                return (
+                  <div key={trade._id} className={`rounded-xl border p-4 flex flex-col justify-between ${isClose ? (isProfit ? 'border-emerald-500/40 bg-emerald-950/20' : 'border-red-500/40 bg-red-950/20') : 'border-white/10 bg-slate-900'}`}>
+                    <div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-bold text-white flex items-center gap-2">
+                            {isClose ? (
+                              <span className="px-2.5 py-1 rounded-md text-[11px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider">
+                                🏁 ENCERRAMENTO (FECHAMENTO)
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-md text-[11px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wider">
+                                🟢 ABERTURA (HEDGE)
+                              </span>
+                            )}
+                            {strategyName && <span className="text-xs text-slate-300">({strategyName})</span>}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">{new Date(trade.createdAt).toLocaleString()}</div>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[11px] uppercase tracking-[0.15em] font-semibold ${statusInfo.cls}`}>{statusInfo.label}</span>
+                      </div>
+
+                      {/* Bloco de Resultado para Fechamento / PnL Realizado */}
+                      {isClose && (
+                        <div className={`mt-3.5 rounded-lg border p-3 ${isProfit ? 'bg-emerald-900/40 border-emerald-500/30' : 'bg-red-900/40 border-red-500/30'}`}>
+                          <div className="text-xs font-semibold text-gray-300 mb-0.5">Resultado Final da Operação:</div>
+                          <div className={`text-lg font-black flex items-center gap-1.5 ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {isProfit ? '🟢 LUCRO REALIZADO:' : '🔴 PREJUÍZO REALIZADO:'} {isProfit ? '+' : ''}${Number(trade.pnl || 0).toFixed(4)} USDT
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs text-gray-400 border-t border-white/5 pt-2.5">
+                        <div>Preço Spot: <span className="text-slate-200 font-medium">{trade.spotPrice !== undefined ? `$${trade.spotPrice.toLocaleString()}` : 'n/a'}</span></div>
+                        <div>Preço Perp: <span className="text-slate-200 font-medium">{trade.perpPrice !== undefined ? `$${trade.perpPrice.toLocaleString()}` : 'n/a'}</span></div>
+                        <div>Montante HFT: <span className="text-slate-200 font-medium">{trade.amount} USDT</span></div>
+                        {!isClose && hasPnl && (
+                          <div>P&amp;L Acumulado: <span className={`font-bold ${Number(trade.pnl) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{Number(trade.pnl) >= 0 ? '+' : ''}${Number(trade.pnl).toFixed(4)} USDT</span></div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Quadro 2 (MEIO): Estratégias Ocupando Toda a Largura */}
+      <div className="mt-6 rounded-xl border border-white/10 bg-slate-950/70 p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Estratégias</h2>
+            <p className="text-sm text-gray-400">Gerencie limites, parâmetros e proteções por par.</p>
+          </div>
+          <span className="rounded-full bg-slate-800 px-3 py-1 text-xs uppercase tracking-[0.16em] text-gray-300">
+            {strategies.length} estratégias
+          </span>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {loadingStrategies && strategies.length === 0 && <div className="text-sm text-gray-400 col-span-full">Carregando...</div>}
+          {!loadingStrategies && strategies.length === 0 && (
+            <div className="col-span-full rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">
+              Nenhuma estratégia.{' '}
+              <button onClick={() => setShowForm({ mode: 'create' })} className="text-indigo-400 underline hover:text-indigo-300">Criar agora</button>
+            </div>
+          )}
+          {strategies.map((s) => (
+            <StrategyCard
+              key={s._id}
+              strategy={s}
+              onUpdate={(upd) => handleUpdateWithConfirm(upd, s)}
+              onDelete={handleDelete}
+              onEdit={(strat) => setShowForm({ mode: 'edit', strategy: strat })}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Quadro 3 (FUNDO): Histórico de Intenções */}
+      <div className="mt-6 rounded-xl border border-white/10 bg-slate-950/70 p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Histórico de Intenções</h2>
+            <p className="text-sm text-gray-400">Oportunidades de funding analisadas e verificadas pelo scanner do robô.</p>
+          </div>
+          {intentionTrades.length > 0 && (
+            <button
+              onClick={handleClearTrades}
+              className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-red-300 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Limpar Intenções
+            </button>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {loadingTrades && intentionTrades.length === 0 && <div className="text-sm text-gray-400 col-span-full">Carregando...</div>}
+          {!loadingTrades && intentionTrades.length === 0 && (
+            <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500 col-span-full">
+              Nenhuma intenção registrada no scanner.
+            </div>
+          )}
+          {intentionTrades.map((trade) => {
+            const statusInfo = STATUS_LABELS[trade.status] ?? { label: trade.status, cls: 'bg-slate-500/15 text-slate-300' };
+            const strategyName = typeof trade.strategyId === 'object' && trade.strategyId !== null ? (trade.strategyId as any).name : null;
+            return (
+              <div key={trade._id} className="rounded-xl border border-white/10 bg-slate-900 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-slate-200 truncate">
+                    {strategyName || trade.type.replace(/_/g, ' ').toUpperCase()}
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider shrink-0 ${statusInfo.cls}`}>
+                    {statusInfo.label}
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] text-gray-500">{new Date(trade.createdAt).toLocaleString()}</div>
+
+                <div className="mt-3 grid grid-cols-2 gap-1.5 text-xs text-gray-400 border-t border-white/5 pt-2">
+                  <div>Spot: <span className="text-slate-200">{trade.spotPrice !== undefined ? `$${trade.spotPrice.toLocaleString()}` : 'n/a'}</span></div>
+                  <div>Perp: <span className="text-slate-200">{trade.perpPrice !== undefined ? `$${trade.perpPrice.toLocaleString()}` : 'n/a'}</span></div>
+                  <div>Montante: <span className="text-slate-200">{trade.amount} USDT</span></div>
+                  {trade.fundingPct !== undefined && trade.fundingPct !== null && (
+                    <div>Funding: <span className={trade.fundingPct >= 0 ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>{trade.fundingPct.toFixed(4)}%</span></div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

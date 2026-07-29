@@ -21,9 +21,9 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       return NextResponse.json({ isOnline: false });
     }
 
-    // Consider online if heartbeat was within the last 15 seconds
+    // Consider online if heartbeat was within the last 90 seconds (to account for exchange API latencies)
     const diffMs = Date.now() - new Date(status.lastHeartbeat).getTime();
-    const isOnline = diffMs < 15000;
+    const isOnline = diffMs < 90000;
 
     return NextResponse.json({ 
       isOnline,

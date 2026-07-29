@@ -26,7 +26,7 @@ export const GET = withAuth(async (_req: NextRequest, userId: string) => {
 export const POST = withAuth(async (req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
-    const { name, perpSymbol, spotSymbol, tradeSize, minFundingRatePct, maxSlippagePct, maxDailyLoss, cooldownAfterLossMs, perpExchangeKeyId, spotExchangeKeyId } = await req.json();
+    const { name, perpSymbol, spotSymbol, tradeSize, minFundingRatePct, maxSlippagePct, closeThresholdPct, maxDailyLoss, cooldownAfterLossMs, perpExchangeKeyId, spotExchangeKeyId } = await req.json();
 
     if (!name || !perpSymbol || !spotSymbol || tradeSize === undefined || minFundingRatePct === undefined) {
       return NextResponse.json({ error: 'Campos obrigatórios: name, perpSymbol, spotSymbol, tradeSize, minFundingRatePct' }, { status: 400 });
@@ -40,6 +40,7 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
       tradeSize: Number(tradeSize),
       minFundingRatePct: Number(minFundingRatePct),
       maxSlippagePct: maxSlippagePct !== undefined ? Number(maxSlippagePct) : 0.05,
+      closeThresholdPct: closeThresholdPct !== undefined ? Number(closeThresholdPct) : 0.3,
       maxDailyLoss: maxDailyLoss !== undefined ? Number(maxDailyLoss) : 10,
       cooldownAfterLossMs: cooldownAfterLossMs !== undefined ? Number(cooldownAfterLossMs) : 3600000,
       perpExchangeKeyId: perpExchangeKeyId || null,
@@ -63,7 +64,7 @@ export const PUT = withAuth(async (req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
     const body = await req.json();
-    const { _id, active, autoExecute, tradeSize, minFundingRatePct, name, maxSlippagePct, maxDailyLoss, cooldownAfterLossMs, perpExchangeKeyId, spotExchangeKeyId } = body;
+    const { _id, active, autoExecute, tradeSize, minFundingRatePct, name, maxSlippagePct, closeThresholdPct, maxDailyLoss, cooldownAfterLossMs, perpExchangeKeyId, spotExchangeKeyId, resetCooldown } = body;
 
     if (!_id) {
       return NextResponse.json({ error: 'Missing _id' }, { status: 400 });
@@ -76,10 +77,17 @@ export const PUT = withAuth(async (req: NextRequest, userId: string) => {
     if (minFundingRatePct !== undefined) updateData.minFundingRatePct = Number(minFundingRatePct);
     if (name !== undefined) updateData.name = name;
     if (maxSlippagePct !== undefined) updateData.maxSlippagePct = Number(maxSlippagePct);
+    if (closeThresholdPct !== undefined) updateData.closeThresholdPct = Number(closeThresholdPct);
     if (maxDailyLoss !== undefined) updateData.maxDailyLoss = Number(maxDailyLoss);
     if (cooldownAfterLossMs !== undefined) updateData.cooldownAfterLossMs = Number(cooldownAfterLossMs);
     if (perpExchangeKeyId !== undefined) updateData.perpExchangeKeyId = perpExchangeKeyId || null;
     if (spotExchangeKeyId !== undefined) updateData.spotExchangeKeyId = spotExchangeKeyId || null;
+
+    if (resetCooldown) {
+      // In Mongoose, to completely remove the field or set it to null:
+      updateData.lastLossAt = null;
+      updateData.dailyLossAccum = 0;
+    }
 
     const strategy = await PerpArbStrategy.findOneAndUpdate(
       { _id, userId },

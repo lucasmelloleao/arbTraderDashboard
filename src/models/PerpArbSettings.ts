@@ -11,7 +11,8 @@ const PerpArbSettingsSchema = new mongoose.Schema({
   scanIntervalMs: { type: Number, default: 120000 },
   targetSpotBuyUSD: { type: Number, default: 1000 },
   maxDailyLoss: { type: Number, default: 10 },
-  maxSlippagePct: { type: Number, default: 0.1 }
+  maxSlippagePct: { type: Number, default: 0.1 },
+  allowedExchanges: { type: [String], default: [] }
 }, { timestamps: true });
 
 export default mongoose.models.PerpArbSettings || mongoose.model('PerpArbSettings', PerpArbSettingsSchema);
