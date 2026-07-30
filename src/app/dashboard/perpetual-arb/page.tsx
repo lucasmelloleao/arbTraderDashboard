@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -262,6 +262,17 @@ function StrategyFormModal({ initial, onClose, onSaved, mode, exchangeKeys }: {
                     placeholder="BTC/USDT"
                     className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none" />
                 </div>
+              </div>
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3">
+                <label className="flex items-center gap-2 text-xs font-semibold text-emerald-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="accent-emerald-500 w-4 h-4"
+                    checked={form.positionOpen || false}
+                    onChange={(e) => f('positionOpen', e.target.checked)}
+                  />
+                  🟢 Marcar como Posição Aberta (Já com ordem aberta no Spot e Futuros)
+                </label>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -532,6 +543,19 @@ function StrategyCard({ strategy, onUpdate, onDelete, onEdit }: {
             <TimerReset className="h-4 w-4" /> Resetar Cooldown
           </button>
         )}
+        {!strategy.positionOpen ? (
+          <button
+            onClick={() => onUpdate({ _id: strategy._id, positionOpen: true, positionOpenedAt: new Date() } as any)}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600/30 border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-600/50 hover:text-white transition-colors"
+            title="Marcar esta estratégia como uma Posição Aberta para aparecer no Dashboard"
+          >
+            🟢 Marcar Posição Aberta
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 px-3 py-2 text-sm font-semibold text-emerald-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> Posição Aberta
+          </span>
+        )}
         <button
           onClick={() => onEdit(strategy)}
           className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
@@ -562,6 +586,63 @@ function ManualScanModal({ onClose, onCreateStrategy, exchangeKeys }: { onClose:
   const [results, setResults] = useState<any[]>([]);
   const [errorCount, setErrorCount] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
+    key: 'netFundingPct',
+    direction: 'desc',
+  });
+
+  const handleSort = (key: string) => {
+    if (sortConfig.key === key) {
+      setSortConfig({
+        key,
+        direction: sortConfig.direction === 'asc' ? 'desc' : 'asc',
+      });
+    } else {
+      setSortConfig({ key, direction: 'desc' });
+    }
+  };
+
+  const sortedResults = useMemo(() => {
+    return [...results].sort((a, b) => {
+      let aVal = a[sortConfig.key];
+      let bVal = b[sortConfig.key];
+
+      if (sortConfig.key === 'symbol') {
+        aVal = a.symbol || a.spotSymbol || '';
+        bVal = b.symbol || b.spotSymbol || '';
+      }
+
+      if (typeof aVal === 'string') {
+        const cmp = String(aVal).localeCompare(String(bVal || ''));
+        return sortConfig.direction === 'asc' ? cmp : -cmp;
+      }
+
+      const numA = Number(aVal || 0);
+      const numB = Number(bVal || 0);
+      if (numA < numB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (numA > numB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [results, sortConfig]);
+
+  const renderSortHeader = (label: string, key: string, alignRight = false) => {
+    const isSorted = sortConfig.key === key;
+    return (
+      <th
+        onClick={() => handleSort(key)}
+        className={`px-4 py-3 cursor-pointer select-none hover:text-white transition-colors ${alignRight ? 'text-right' : ''}`}
+        title={`Clique para ordenar por ${label}`}
+      >
+        <div className={`flex items-center gap-1.5 ${alignRight ? 'justify-end' : ''}`}>
+          <span>{label}</span>
+          <span className={`text-[11px] ${isSorted ? 'text-indigo-400 font-bold' : 'text-slate-600'}`}>
+            {isSorted ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
+          </span>
+        </div>
+      </th>
+    );
+  };
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -708,23 +789,27 @@ function ManualScanModal({ onClose, onCreateStrategy, exchangeKeys }: { onClose:
 
           {results.length > 0 && (
             <div className="rounded-xl border border-white/10 bg-slate-950/50 overflow-x-auto">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-white/10 text-xs text-slate-300 font-semibold">
+                <span>Exibindo {sortedResults.length} pares de moedas consultados</span>
+                <span className="text-slate-400 font-normal">Clique no cabeçalho de qualquer coluna para ordenar (▲/▼)</span>
+              </div>
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-white/10 bg-slate-900/50 text-xs font-medium uppercase tracking-wider text-slate-400">
                   <tr>
-                    <th className="px-4 py-3">Moeda</th>
-                    <th className="px-4 py-3">Corretora(s)</th>
-                    <th className="px-4 py-3">Vol 24h</th>
-                    <th className="px-4 py-3">Spot Ask</th>
-                    <th className="px-4 py-3">Perp Bid</th>
-                    <th className="px-4 py-3">Spread (Backwd)</th>
-                    <th className="px-4 py-3">Funding Rate</th>
-                    <th className="px-4 py-3">Taxas Taker</th>
-                    <th className="px-4 py-3">Lucro Líquido</th>
+                    {renderSortHeader('Moeda', 'symbol')}
+                    {renderSortHeader('Corretora(s)', 'exchange')}
+                    {renderSortHeader('Vol 24h', 'volume24h')}
+                    {renderSortHeader('Spot Ask', 'spotAsk')}
+                    {renderSortHeader('Perp Bid', 'perpBid')}
+                    {renderSortHeader('Spread (Backwd)', 'spreadPct')}
+                    {renderSortHeader('Funding Rate', 'fundingPct')}
+                    {renderSortHeader('Taxas Taker', 'totalFeePct')}
+                    {renderSortHeader('Lucro Líquido', 'netFundingPct')}
                     <th className="px-4 py-3 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {results.map((r, i) => (
+                  {sortedResults.map((r, i) => (
                     <tr key={i} className="hover:bg-white/[0.02]">
                       <td className="px-4 py-3 font-bold text-indigo-400">{r.symbol || r.spotSymbol || symbol}</td>
                       <td className="px-4 py-3 font-bold text-white">{r.exchange}</td>
@@ -816,12 +901,75 @@ export default function PerpetualArbPage() {
   const [settingsForm, setSettingsForm] = useState<any>({});
   const [botOnline, setBotOnline] = useState<boolean>(false);
 
-  // ── Derived stats ──────────────────────────────────────────────────────────
+  // ── Derived stats (Totalmente independentes da existência do documento da estratégia) ──
   const totalPnl = trades.reduce((acc, t) => acc + (t.pnl ?? 0), 0);
   const executedCount = trades.filter((t) => t.status === 'executed').length;
   const activeCount = strategies.filter((s) => s.active).length;
 
-  const openPositions = strategies.filter((s) => s.positionOpen);
+  const openPositions = useMemo(() => {
+    const map = new Map<string, any>();
+
+    // 1. Adiciona estratégias do banco marcadas com positionOpen: true
+    for (const s of strategies) {
+      if (s.positionOpen) {
+        map.set(String(s._id), { ...s, isDeletedStrategy: false });
+      }
+    }
+
+    // 2. Adiciona trades 'open_hedge' executados/simulados que não possuem trade 'close_hedge' posterior
+    const openHedgeTrades = trades.filter((t) =>
+      t.type === 'open_hedge' && (t.status === 'executed' || t.status === 'simulated')
+    );
+
+    for (const openTrade of openHedgeTrades) {
+      const sId = typeof openTrade.strategyId === 'object' && openTrade.strategyId !== null
+        ? String((openTrade.strategyId as any)._id)
+        : String(openTrade.strategyId || '');
+
+      const symbolKey = openTrade.perpSymbol || (openTrade.strategyId as any)?.perpSymbol || '';
+
+      const hasCloseTrade = trades.some((t) => {
+        if (t.type !== 'close_hedge' || (t.status !== 'executed' && t.status !== 'simulated')) return false;
+        const closeStratId = typeof t.strategyId === 'object' && t.strategyId !== null
+          ? String((t.strategyId as any)._id)
+          : String(t.strategyId || '');
+        const closeSymbol = t.perpSymbol || (t.strategyId as any)?.perpSymbol || '';
+
+        const sameStrategy = sId && closeStratId && sId === closeStratId;
+        const sameSymbol = symbolKey && closeSymbol && symbolKey === closeSymbol;
+
+        return (sameStrategy || sameSymbol) && new Date(t.createdAt).getTime() >= new Date(openTrade.createdAt).getTime();
+      });
+
+      if (!hasCloseTrade) {
+        const key = (sId && map.has(sId)) ? sId : (symbolKey || String(openTrade._id));
+        if (!map.has(key)) {
+          const stratObj = typeof openTrade.strategyId === 'object' && openTrade.strategyId !== null ? openTrade.strategyId : {};
+          const pSym = openTrade.perpSymbol || (stratObj as any)?.perpSymbol || 'N/A';
+          const sSym = openTrade.spotSymbol || (stratObj as any)?.spotSymbol || 'N/A';
+          const name = openTrade.strategyName || (stratObj as any)?.name || `[OPERANTE] ${pSym}`;
+
+          map.set(key, {
+            _id: sId || String(openTrade._id),
+            name,
+            perpSymbol: pSym,
+            spotSymbol: sSym,
+            tradeSize: openTrade.amount || 0,
+            positionSize: openTrade.amount || 0,
+            positionOpen: true,
+            positionOpenedAt: openTrade.createdAt,
+            lastSpotPrice: openTrade.spotPrice,
+            lastPerpPrice: openTrade.perpPrice,
+            isDeletedStrategy: !strategies.some(s => String(s._id) === sId),
+            openTradeObj: openTrade,
+          });
+        }
+      }
+    }
+
+    return Array.from(map.values());
+  }, [strategies, trades]);
+
   const marriedTrades = trades.filter((t) => t.type === 'open_hedge' || t.type === 'close_hedge' || t.status === 'executed' || t.status === 'simulated');
   const intentionTrades = trades.filter((t) => t.type === 'funding_check' || t.status === 'detected' || t.status === 'skipped' || t.status === 'failed');
 
@@ -921,26 +1069,38 @@ export default function PerpetualArbPage() {
     } catch (err: any) { setError(err.message); }
   };
 
-  const closePosition = async (strategyId: string) => {
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const closePosition = async (strategyId: string, perpSymbol?: string, name?: string) => {
+    const key = strategyId || perpSymbol || 'closing';
+    setClosingId(key);
+    setError(null);
+    setSuccessMsg(`🚀 Encerrando posição de ${name || perpSymbol || 'mercado'}... O robô está enviando as ordens de venda Spot e recompra Perpétuo na MEXC.`);
     try {
       const res = await fetch('/api/perp-arb/close', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ strategyId }),
+        body: JSON.stringify({ strategyId, perpSymbol }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao encerrar posição');
+      setSuccessMsg(`✅ Encerramento enviado com sucesso para ${name || perpSymbol || 'mercado'}! Acompanhe nos logs do terminal.`);
+      setTimeout(() => setSuccessMsg(null), 6000);
       await fetchStrategies();
       await fetchTrades();
     } catch (err: any) {
+      setSuccessMsg(null);
       setError(err.message);
+    } finally {
+      setClosingId(null);
     }
   };
 
-  const handleClosePosition = (s: PerpArbStrategy) => {
+  const handleClosePosition = (s: any) => {
     setConfirmState({
-      message: `Encerrar a posição de "${s.name}" agora? O robô irá fechar o Spot (Venda) e Perpétuo (Recompra Short) a mercado.`,
-      onConfirm: () => { closePosition(s._id); setConfirmState(null); },
+      message: `Encerrar a posição de "${s.name}" agora? O robô irá fechar o Spot (Venda) e Perpétuo (Recompra Short) a mercado na MEXC.`,
+      onConfirm: () => { closePosition(s._id, s.perpSymbol, s.name); setConfirmState(null); },
     });
   };
 
@@ -1182,32 +1342,52 @@ export default function PerpetualArbPage() {
 
         {/* Conteúdo da Aba Em Aberto */}
         {opTab === 'open' && (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            {successMsg && (
+              <div className="mb-4 rounded-xl border border-emerald-500/40 bg-emerald-950/80 p-4 text-sm font-semibold text-emerald-200 shadow-xl flex items-center gap-3 animate-pulse">
+                <RefreshCw className="h-5 w-5 animate-spin text-emerald-400 shrink-0" />
+                <span>{successMsg}</span>
+              </div>
+            )}
+            <div className="grid gap-4 md:grid-cols-2">
             {openPositions.length === 0 ? (
               <div className="col-span-full rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">
                 Nenhuma posição casada aberta no momento.
               </div>
             ) : (
               openPositions.map((s) => {
-                const openTrade = trades.find(t => 
-                  getStrategyId(t.strategyId) === s._id && 
+                const isClosingThis = closingId === s._id || closingId === s.perpSymbol;
+                const openTrade = s.openTradeObj || trades.find(t => 
                   t.type === 'open_hedge' && 
-                  (t.status === 'executed' || t.status === 'simulated')
+                  (t.status === 'executed' || t.status === 'simulated') &&
+                  (getStrategyId(t.strategyId) === s._id || (t.perpSymbol && t.perpSymbol === s.perpSymbol))
                 );
 
                 const latestCheck = trades.find(t => 
-                  getStrategyId(t.strategyId) === s._id && 
                   t.type === 'funding_check' &&
-                  t.spotPrice !== undefined && t.perpPrice !== undefined
+                  t.spotPrice !== undefined && t.perpPrice !== undefined &&
+                  (getStrategyId(t.strategyId) === s._id || (t.perpSymbol && t.perpSymbol === s.perpSymbol))
                 );
+
+                const matchedStrat = strategies.find(st => st.perpSymbol === s.perpSymbol || String(st._id) === s._id);
+
+                const fundingAtOpenVal = openTrade?.fundingPct ?? (openTrade?.fundingRate !== undefined && openTrade?.fundingRate !== null ? openTrade.fundingRate * 100 : null) ?? s.minFundingRatePct ?? matchedStrat?.currentFundingRate ?? latestCheck?.fundingPct;
+
+                const currentFundingVal = matchedStrat?.currentFundingRate ?? s.currentFundingRate ?? latestCheck?.fundingPct ?? (latestCheck?.fundingRate !== undefined && latestCheck?.fundingRate !== null ? latestCheck.fundingRate * 100 : null) ?? openTrade?.fundingPct;
 
                 const entrySpot = openTrade?.spotPrice;
                 const entryPerp = openTrade?.perpPrice;
-                const currentSpot = s.lastSpotPrice || latestCheck?.spotPrice || entrySpot;
-                const currentPerp = s.lastPerpPrice || latestCheck?.perpPrice || entryPerp;
+
+                const currentSpot = matchedStrat?.lastSpotPrice || latestCheck?.spotPrice || s.lastSpotPrice || entrySpot;
+                const currentPerp = matchedStrat?.lastPerpPrice || latestCheck?.perpPrice || s.lastPerpPrice || entryPerp;
 
                 const positionSize = s.positionSize || s.tradeSize;
-                const fundingCollected = s.fundingCollected || 0;
+                
+                const accumulatedFundingTrades = trades.filter(t => 
+                  t.type === 'funding_fee_accumulated' && 
+                  (t.perpSymbol === s.perpSymbol || getStrategyId(t.strategyId) === s._id)
+                );
+                const fundingCollected = matchedStrat?.fundingCollected || s.fundingCollected || accumulatedFundingTrades.reduce((acc, t) => acc + (t.pnl || 0), 0);
 
                 let spotPnL = 0;
                 let perpPnL = 0;
@@ -1223,6 +1403,21 @@ export default function PerpetualArbPage() {
                 const estimatedExitValue = positionSize + totalUnrealizedPnL;
                 const unrealizedPct = positionSize > 0 ? (totalUnrealizedPnL / positionSize) * 100 : 0;
 
+                const fmtP = (val: number | null | undefined) => {
+                  if (val === null || val === undefined || isNaN(val)) return '—';
+                  if (val < 1) return val.toFixed(6);
+                  return val.toFixed(4);
+                };
+
+                const fmtUSDT = (val: number | null | undefined) => {
+                  if (val === null || val === undefined || isNaN(val)) return '+$0.0000';
+                  const pref = val >= 0 ? '+' : '';
+                  if (Math.abs(val) > 0 && Math.abs(val) < 0.0001) {
+                    return `${pref}$${val.toFixed(6)}`;
+                  }
+                  return `${pref}$${val.toFixed(4)}`;
+                };
+
                 return (
                   <div key={s._id} className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-5 flex flex-col justify-between shadow-lg">
                     <div>
@@ -1235,15 +1430,27 @@ export default function PerpetualArbPage() {
                           <div className="text-xs text-gray-400 mt-0.5">{s.perpSymbol} / {s.spotSymbol}</div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <span className="rounded-md bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-300 border border-emerald-500/30">
+                            💰 Posição: ${positionSize.toFixed(2)} USDT{entrySpot ? ` (~${(positionSize / entrySpot).toFixed(4)} base)` : ''}
+                          </span>
                           <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-bold text-emerald-300 uppercase tracking-wider border border-emerald-500/30">
                             Spot LONG + Perp SHORT
                           </span>
                           <button
+                            disabled={isClosingThis}
                             onClick={() => handleClosePosition(s)}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white px-3 py-1.5 text-xs font-bold shadow-[0_0_12px_rgba(220,38,38,0.4)] transition-all hover:scale-105"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white px-3 py-1.5 text-xs font-bold shadow-[0_0_12px_rgba(220,38,38,0.4)] transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Encerrar posição a mercado imediatamente"
                           >
-                            <Power className="h-3.5 w-3.5" /> Encerrar Agora
+                            {isClosingThis ? (
+                              <>
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Encerrando...
+                              </>
+                            ) : (
+                              <>
+                                <Power className="h-3.5 w-3.5" /> Encerrar Agora
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>
@@ -1252,7 +1459,7 @@ export default function PerpetualArbPage() {
                       <div className="mt-4 rounded-lg bg-slate-900/90 border border-emerald-500/20 p-3.5">
                         <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
                           <span>Valor Atual de Encerramento:</span>
-                          <span className="font-semibold text-slate-300">Aporte: ${positionSize.toFixed(2)} USDT</span>
+                          <span className="font-bold text-emerald-300">Tamanho da Posição: ${positionSize.toFixed(2)} USDT{entrySpot ? ` (~${(positionSize / entrySpot).toFixed(4)} base)` : ''}</span>
                         </div>
                         <div className="flex items-baseline justify-between">
                           <div className="text-2xl font-extrabold text-white">
@@ -1268,13 +1475,13 @@ export default function PerpetualArbPage() {
                           <div className="text-gray-400">
                             Variação Mercado (Spot+Perp):{' '}
                             <span className={marketPnL >= 0 ? 'text-emerald-300 font-medium' : 'text-red-300 font-medium'}>
-                              {marketPnL >= 0 ? '+' : ''}${marketPnL.toFixed(4)}
+                              {fmtUSDT(marketPnL)}
                             </span>
                           </div>
                           <div className="text-gray-400 text-right">
                             Funding Coletado:{' '}
                             <span className="text-cyan-300 font-medium">
-                              +${fundingCollected.toFixed(4)}
+                              +{fmtUSDT(fundingCollected).replace('+', '')}
                             </span>
                           </div>
                         </div>
@@ -1293,10 +1500,10 @@ export default function PerpetualArbPage() {
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                               Spot (LONG)
                             </span>
-                            {entrySpot && <span className="text-slate-400 font-mono text-[11px]">${entrySpot} → ${currentSpot || entrySpot}</span>}
+                            {entrySpot && <span className="text-slate-400 font-mono text-[11px]">${fmtP(entrySpot)} → ${fmtP(currentSpot)}</span>}
                           </div>
                           <div className={`font-mono font-bold ${spotPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {spotPnL >= 0 ? '+' : ''}${spotPnL.toFixed(4)} USDT
+                            {fmtUSDT(spotPnL)} USDT
                           </div>
                         </div>
 
@@ -1306,10 +1513,10 @@ export default function PerpetualArbPage() {
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                               Perpétuo (SHORT)
                             </span>
-                            {entryPerp && <span className="text-slate-400 font-mono text-[11px]">${entryPerp} → ${currentPerp || entryPerp}</span>}
+                            {entryPerp && <span className="text-slate-400 font-mono text-[11px]">${fmtP(entryPerp)} → ${fmtP(currentPerp)}</span>}
                           </div>
                           <div className={`font-mono font-bold ${perpPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {perpPnL >= 0 ? '+' : ''}${perpPnL.toFixed(4)} USDT
+                            {fmtUSDT(perpPnL)} USDT
                           </div>
                         </div>
 
@@ -1332,21 +1539,13 @@ export default function PerpetualArbPage() {
                         <div>
                           Funding na Abertura:{' '}
                           <span className="font-semibold text-indigo-300 block sm:inline">
-                            {openTrade?.fundingPct !== undefined && openTrade?.fundingPct !== null
-                              ? `${openTrade.fundingPct.toFixed(4)}%`
-                              : openTrade?.fundingRate !== undefined && openTrade?.fundingRate !== null
-                              ? `${(openTrade.fundingRate * 100).toFixed(4)}%`
-                              : s.minFundingRatePct !== undefined && s.minFundingRatePct !== null
-                              ? `${s.minFundingRatePct.toFixed(4)}%`
-                              : s.currentFundingRate !== undefined && s.currentFundingRate !== null
-                              ? `${s.currentFundingRate.toFixed(4)}%`
-                              : '—'}
+                            {fundingAtOpenVal !== undefined && fundingAtOpenVal !== null ? `${Number(fundingAtOpenVal).toFixed(4)}%` : '—'}
                           </span>
                         </div>
                         <div>
                           Funding Rate Atual:{' '}
                           <span className="font-semibold text-emerald-400 block sm:inline">
-                            {s.currentFundingRate !== undefined && s.currentFundingRate !== null ? `${s.currentFundingRate.toFixed(4)}%` : '—'}
+                            {currentFundingVal !== undefined && currentFundingVal !== null ? `${Number(currentFundingVal).toFixed(4)}%` : '—'}
                           </span>
                         </div>
                       </div>
@@ -1356,7 +1555,8 @@ export default function PerpetualArbPage() {
               })
             )}
           </div>
-        )}
+        </div>
+      )}
 
         {/* Conteúdo da Aba Histórico Casadas */}
         {opTab === 'executed' && (
@@ -1368,7 +1568,10 @@ export default function PerpetualArbPage() {
             ) : (
               marriedTrades.map((trade) => {
                 const statusInfo = STATUS_LABELS[trade.status] ?? { label: trade.status, cls: 'bg-slate-500/15 text-slate-300' };
-                const strategyName = typeof trade.strategyId === 'object' && trade.strategyId !== null ? (trade.strategyId as any).name : null;
+                const stratObj = typeof trade.strategyId === 'object' && trade.strategyId !== null ? trade.strategyId : {};
+                const strategyName = trade.strategyName || stratObj.name || (trade.perpSymbol ? `[EXECUTADA] ${trade.perpSymbol}` : 'Operação Casada');
+                const perpSym = trade.perpSymbol || stratObj.perpSymbol || 'N/A';
+                const spotSym = trade.spotSymbol || stratObj.spotSymbol || 'N/A';
                 const isClose = trade.type === 'close_hedge';
                 const hasPnl = trade.pnl !== null && trade.pnl !== undefined;
                 const pnlVal = Number(trade.pnl || 0);
@@ -1392,16 +1595,21 @@ export default function PerpetualArbPage() {
                               </span>
                             )}
                           </div>
-                          {strategyName && <div className="text-xs font-semibold text-indigo-300 mt-1">{strategyName}</div>}
+                          <div className="text-xs font-semibold text-indigo-300 mt-1">{strategyName} <span className="text-slate-400 font-normal">({perpSym} / {spotSym})</span></div>
                         </div>
-                        <span className={`rounded-full px-2.5 py-0.5 text-[11px] uppercase tracking-[0.15em] font-semibold ${statusInfo.cls}`}>{statusInfo.label}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-md bg-indigo-500/20 px-2.5 py-1 text-xs font-bold text-indigo-300 border border-indigo-500/30">
+                            💰 Posição: ${amount.toFixed(2)} USDT{trade.spotPrice ? ` (~${(amount / trade.spotPrice).toFixed(4)} base)` : ''}
+                          </span>
+                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] uppercase tracking-[0.15em] font-semibold ${statusInfo.cls}`}>{statusInfo.label}</span>
+                        </div>
                       </div>
 
                       {/* Bloco Destaque de Resultado / PnL Realizado da Execução */}
                       <div className="mt-4 rounded-lg bg-slate-950/90 border border-white/10 p-3.5">
                         <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
                           <span>{isClose ? 'Resultado Final de Encerramento:' : 'Tamanho da Posição Executada:'}</span>
-                          <span className="font-semibold text-slate-300">Aporte: ${amount.toFixed(2)} USDT</span>
+                          <span className="font-bold text-indigo-300">Tamanho da Posição: ${amount.toFixed(2)} USDT{trade.spotPrice ? ` (~${(amount / trade.spotPrice).toFixed(4)} base)` : ''}</span>
                         </div>
                         <div className="flex items-baseline justify-between">
                           <div className="text-2xl font-extrabold text-white">

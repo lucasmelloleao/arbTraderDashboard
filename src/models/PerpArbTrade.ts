@@ -2,8 +2,11 @@ import mongoose from 'mongoose';
 
 const PerpArbTradeSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  strategyId: { type: mongoose.Schema.Types.ObjectId, ref: 'PerpArbStrategy', required: true, index: true },
-  type: { type: String, enum: ['funding_check', 'open_hedge', 'close_hedge'], required: true },
+  strategyId: { type: mongoose.Schema.Types.ObjectId, ref: 'PerpArbStrategy', index: true },
+  strategyName: { type: String },
+  perpSymbol: { type: String },
+  spotSymbol: { type: String },
+  type: { type: String, required: true },
   spotPrice: { type: Number },
   perpPrice: { type: Number },
   fundingRate: { type: Number },
@@ -12,7 +15,6 @@ const PerpArbTradeSchema = new mongoose.Schema({
   pnl: { type: Number, default: null },     // realized P&L in USDT
   status: {
     type: String,
-    enum: ['detected', 'executed', 'skipped', 'failed', 'simulated'],
     default: 'detected'
   },
   errorMessage: { type: String },

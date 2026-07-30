@@ -10,23 +10,25 @@ export const dynamic = 'force-dynamic';
 export const POST = withAuth(async (req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
-    const { strategyId } = await req.json();
+    const { strategyId, perpSymbol } = await req.json();
 
-    if (!strategyId) {
-      return NextResponse.json({ error: 'strategyId é obrigatório' }, { status: 400 });
+    if (!strategyId && !perpSymbol) {
+      return NextResponse.json({ error: 'strategyId ou perpSymbol é obrigatório' }, { status: 400 });
     }
 
-    const strat: any = await PerpArbStrategy.findOne({ _id: strategyId, userId });
-    if (!strat) {
-      return NextResponse.json({ error: 'Estratégia não encontrada' }, { status: 404 });
+    let strat: any = await PerpArbStrategy.findOne({ _id: strategyId, userId });
+    if (!strat && perpSymbol) {
+      strat = await PerpArbStrategy.findOne({ perpSymbol, userId });
     }
-
-    // Notifica o serviço do bot via Redis pub/sub se disponível para fechar na corretora
 
     // 1. Notifica o serviço do bot via Redis pub/sub se disponível
     if (redis) {
       try {
-        await redis.publish('perp-arb-control', JSON.stringify({ action: 'CLOSE_STRATEGY', strategyId: String(strat._id) }));
+        await redis.publish('perp-arb-control', JSON.stringify({ 
+          action: 'CLOSE_STRATEGY', 
+          strategyId: strat ? String(strat._id) : (strategyId || ''),
+          perpSymbol: perpSymbol || strat?.perpSymbol || ''
+        }));
       } catch (err) {
         console.error('Erro ao publicar CLOSE no Redis:', err);
       }

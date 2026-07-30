@@ -11,11 +11,26 @@ export const GET = withAuth(async (_req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
 
-    const trades = await PerpArbTrade.find({ userId })
+    // Busca prioritariamente todas as operações de Abertura e Fechamento executadas
+    const hedgeTrades = await PerpArbTrade.find({
+      userId,
+      type: { $in: ['open_hedge', 'close_hedge', 'funding_fee_accumulated'] }
+    })
+      .sort({ createdAt: -1 })
+      .limit(300)
+      .populate({ path: 'strategyId', model: PerpArbStrategy, select: 'name perpSymbol spotSymbol' })
+      .lean();
+
+    const logTrades = await PerpArbTrade.find({
+      userId,
+      type: { $nin: ['open_hedge', 'close_hedge', 'funding_fee_accumulated'] }
+    })
       .sort({ createdAt: -1 })
       .limit(50)
       .populate({ path: 'strategyId', model: PerpArbStrategy, select: 'name perpSymbol spotSymbol' })
       .lean();
+
+    const trades = [...hedgeTrades, ...logTrades].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return NextResponse.json(trades);
   } catch (error: any) {

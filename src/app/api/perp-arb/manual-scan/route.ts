@@ -37,8 +37,10 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         throw new Error(`Corretoras ${spotExId} / ${perpExId} não suportadas`);
       }
 
-      const spotExchange = new (ccxt as any)[spotCcxtId]({ enableRateLimit: true });
-      const perpExchange = new (ccxt as any)[perpCcxtId]({ enableRateLimit: true });
+      const spotExchange = new (ccxt as any)[spotCcxtId]({ enableRateLimit: true, timeout: 10000, options: { fetchCurrencies: false } });
+      spotExchange.has = { ...(spotExchange.has || {}), fetchCurrencies: false };
+      const perpExchange = new (ccxt as any)[perpCcxtId]({ enableRateLimit: true, timeout: 10000, options: { fetchCurrencies: false } });
+      perpExchange.has = { ...(perpExchange.has || {}), fetchCurrencies: false };
 
       const withTimeout = (promise: Promise<any>, ms: number) => {
         return Promise.race([
@@ -67,10 +69,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         }
       }
 
-      if (isGlobalScan) {
-        validPairs = validPairs.slice(0, 50); // limita para evitar rate-limit no scan global
-      }
-
+      // Permite buscar todos os pares válidos sem limite artificial de 50 ou 20
       const pSymbols = validPairs.map(v => v.pSym);
       const sSymbols = Array.from(new Set(validPairs.map(v => v.sSym)));
 
@@ -93,7 +92,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           const rateStr = pTicker.info.fundingRate || pTicker.info.funding_rate || pTicker.info.lastFundingRate;
           if (rateStr !== undefined) fundingRate = Number(rateStr);
         }
-        if (!fundingRate || isNaN(fundingRate)) continue;
+        if (isNaN(fundingRate)) fundingRate = 0;
 
         const fundingPct = fundingRate * 100;
         const perpBid = pTicker.bid || pTicker.last;
@@ -128,7 +127,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
       return NextResponse.json({
         symbol: isGlobalScan ? 'CROSS SCAN' : spotSymbolFilter,
-        results: isGlobalScan ? opps.slice(0, 20) : opps,
+        results: opps,
         errors: 0,
       });
     }
@@ -142,7 +141,8 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         const ccxtId = exId === 'gateio' ? 'gate' : exId;
         if (!(ccxt as any)[ccxtId]) throw new Error(`Exchange ${exId} not supported`);
         
-        const exchange = new (ccxt as any)[ccxtId]({ enableRateLimit: true });
+        const exchange = new (ccxt as any)[ccxtId]({ enableRateLimit: true, timeout: 10000, options: { fetchCurrencies: false } });
+        exchange.has = { ...(exchange.has || {}), fetchCurrencies: false };
         
         // Timeout wrapper
         const withTimeout = (promise: Promise<any>, ms: number) => {
@@ -246,10 +246,6 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
       .flatMap(r => r.value)
       .sort((a, b) => b.netFundingPct - a.netFundingPct);
-      
-    if (isGlobalScan) {
-      successfulResults = successfulResults.slice(0, 20);
-    }
 
     const failedResults = results
       .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
