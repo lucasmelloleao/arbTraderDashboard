@@ -16,6 +16,8 @@ export default function DashboardOverview() {
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [cexBalances, setCexBalances] = useState<any[]>([]);
   const [totalCexUsd, setTotalCexUsd] = useState<number | null>(null);
+  const [totalSpotUsd, setTotalSpotUsd] = useState<number>(0);
+  const [totalFuturesUsd, setTotalFuturesUsd] = useState<number>(0);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
@@ -34,8 +36,11 @@ export default function DashboardOverview() {
           const balData = await balancesRes.json();
           if (balData.success && balData.exchanges) {
             setCexBalances(balData.exchanges);
-            const total = Number(balData.spotUsdt || 0) + Number(balData.spotUsdc || 0) + Number(balData.futuresUsdt || 0) + Number(balData.futuresUsdc || 0);
-            setTotalCexUsd(total);
+            const spotTot = Number(balData.spotUsdt || 0) + Number(balData.spotUsdc || 0);
+            const futTot = Number(balData.futuresUsdt || 0) + Number(balData.futuresUsdc || 0);
+            setTotalSpotUsd(spotTot);
+            setTotalFuturesUsd(futTot);
+            setTotalCexUsd(spotTot + futTot);
           }
         }
 
@@ -55,10 +60,33 @@ export default function DashboardOverview() {
                 chartDataMap[timeKey] = {
                   time: timeKey,
                   formattedTime: dateObj.toLocaleString(),
-                  totalUsdValue: 0
+                  spotUsdValue: 0,
+                  futuresUsdValue: 0,
+                  totalUsdValue: 0,
                 };
               }
-              chartDataMap[timeKey].totalUsdValue += snapshot.totalUsdValue;
+
+              let spot = 0;
+              let futures = 0;
+
+              if (Array.isArray(snapshot.balances) && snapshot.balances.length > 0) {
+                snapshot.balances.forEach((b: any) => {
+                  const assetStr = String(b.asset || '').toLowerCase();
+                  if (assetStr.includes('spot')) {
+                    spot += Number(b.usdValue || b.total || 0);
+                  } else if (assetStr.includes('perp') || assetStr.includes('futures')) {
+                    futures += Number(b.usdValue || b.total || 0);
+                  } else {
+                    spot += Number(b.usdValue || b.total || 0);
+                  }
+                });
+              } else {
+                spot = Number(snapshot.totalUsdValue || 0);
+              }
+
+              chartDataMap[timeKey].spotUsdValue += spot;
+              chartDataMap[timeKey].futuresUsdValue += futures;
+              chartDataMap[timeKey].totalUsdValue += (spot + futures) || snapshot.totalUsdValue || 0;
             });
 
             const formattedChartData = Object.values(chartDataMap).sort((a: any, b: any) => a.time - b.time);
@@ -85,7 +113,7 @@ export default function DashboardOverview() {
       </div>
 
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm">
           <p className="text-sm font-medium text-slate-400 mb-1">Corretoras Conectadas</p>
           <p className="text-3xl font-bold text-white">
@@ -93,29 +121,52 @@ export default function DashboardOverview() {
           </p>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm relative overflow-hidden">
+        <div className="bg-slate-900 border border-emerald-500/20 p-6 rounded-xl shadow-sm relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent"></div>
-          <p className="text-sm font-medium text-slate-400 mb-1">Saldo Total CEX (Spot + Futuros)</p>
-          <p className="text-3xl font-bold text-emerald-400">
-            {loading || totalCexUsd === null
-              ? '...'
-              : `$${totalCexUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          <p className="text-sm font-medium text-emerald-400 mb-1">🟢 Saldo Total Spot (CEX)</p>
+          <p className="text-3xl font-bold text-emerald-300">
+            {loading ? '...' : `$${totalSpotUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          </p>
+        </div>
+
+        <div className="bg-slate-900 border border-indigo-500/20 p-6 rounded-xl shadow-sm relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent"></div>
+          <p className="text-sm font-medium text-indigo-400 mb-1">🟣 Saldo Total Futuros (CEX)</p>
+          <p className="text-3xl font-bold text-indigo-300">
+            {loading ? '...' : `$${totalFuturesUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </p>
         </div>
       </div>
 
-      {/* Gráfico de Evolução Patrimonial */}
+      {/* Gráfico de Evolução Patrimonial Duplo (Spot vs Futuros) */}
       <div>
-        <h3 className="text-xl font-bold text-white mb-4">📈 Evolução Patrimonial</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-white">📈 Evolução Patrimonial (Spot vs Futuros)</h3>
+          <div className="flex items-center gap-4 text-xs font-medium">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+              <span className="text-slate-300">Saldo Spot</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-indigo-500 inline-block"></span>
+              <span className="text-slate-300">Saldo Futuros</span>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm">
           <div style={{ width: '100%', height: '380px' }}>
             {historyData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={historyData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="colorUsdMain" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                    <linearGradient id="colorSpot" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.6} />
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorFutures" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.6} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <XAxis
@@ -129,12 +180,31 @@ export default function DashboardOverview() {
                   <YAxis tick={{ fill: '#64748b' }} tickFormatter={(val) => `$${val}`} domain={['auto', 'auto']} />
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} vertical={false} />
                   <Tooltip
-                    formatter={(value: any) => [`$${Number(value).toFixed(2)}`, 'Patrimônio CEX (USD)']}
+                    formatter={(value: any, key: any) => {
+                      const label = key === 'spotUsdValue' ? '🟢 Saldo Spot' : key === 'futuresUsdValue' ? '🟣 Saldo Futuros' : '⚪ Total';
+                      return [`$${Number(value).toFixed(2)}`, label];
+                    }}
                     labelFormatter={(label: any) => new Date(label).toLocaleString()}
                     contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', color: '#f8fafc', borderRadius: '8px' }}
-                    itemStyle={{ color: '#10b981', fontWeight: 'bold' }}
                   />
-                  <Area type="monotone" dataKey="totalUsdValue" stroke="#10b981" fillOpacity={1} fill="url(#colorUsdMain)" />
+                  <Area
+                    type="monotone"
+                    dataKey="spotUsdValue"
+                    name="spotUsdValue"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorSpot)"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="futuresUsdValue"
+                    name="futuresUsdValue"
+                    stroke="#6366f1"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorFutures)"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -177,13 +247,13 @@ export default function DashboardOverview() {
                   return (
                     <tr key={ex.id || idx} className="hover:bg-slate-800/30 transition-colors">
                       <td className="px-6 py-4 font-medium text-white capitalize">{ex.name || ex.exchangeId}</td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-300">
+                      <td className="px-6 py-4 text-right font-mono text-emerald-400 font-semibold">
                         ${spotTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-300">
+                      <td className="px-6 py-4 text-right font-mono text-indigo-400 font-semibold">
                         ${futTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td className="px-6 py-4 text-right font-mono font-bold text-emerald-400 text-base">
+                      <td className="px-6 py-4 text-right font-mono font-bold text-white text-base">
                         ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
