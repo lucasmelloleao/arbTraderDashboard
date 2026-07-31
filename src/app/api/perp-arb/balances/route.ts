@@ -142,24 +142,31 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) FutBal info sample:`, JSON.stringify(futBal.info).slice(0, 300));
         }
 
-        futuresUsdt = Number(futBal.free?.USDT ?? futBal.USDT?.free ?? futBal.total?.USDT ?? futBal.USDT?.total ?? 0);
-        futuresUsdc = Number(futBal.free?.USDC ?? futBal.USDC?.free ?? futBal.total?.USDC ?? futBal.USDC?.total ?? 0);
+        const freeT = Number(futBal.free?.USDT || futBal.USDT?.free || 0);
+        const totalT = Number(futBal.total?.USDT || futBal.USDT?.total || 0);
+        futuresUsdt = Math.max(freeT, totalT);
+
+        const freeC = Number(futBal.free?.USDC || futBal.USDC?.free || 0);
+        const totalC = Number(futBal.total?.USDC || futBal.USDC?.total || 0);
+        futuresUsdc = Math.max(freeC, totalC);
+
+        function parseFutItem(item: any): number {
+          if (!item) return 0;
+          const eq = Number(item.equity || item.total || item.cashBalance || 0);
+          if (eq > 0) return eq;
+          return Number(item.availableBalance || item.free || 0) + Number(item.positionMargin || item.frozenBalance || item.used || 0);
+        }
 
         // Direct MEXC Contract API fallback if available
         if (futuresUsdt === 0 && (futEx as any).contractPrivateGetAccountAssets) {
           try {
             const assetsRes = await (futEx as any).contractPrivateGetAccountAssets();
-            console.log(`🔍 [BALANCES DEBUG] MEXC contractPrivateGetAccountAssets:`, JSON.stringify(assetsRes).slice(0, 300));
             const dataArr = assetsRes?.data || assetsRes?.data?.data || assetsRes;
             if (Array.isArray(dataArr)) {
               const usdtItem = dataArr.find((item: any) => item.currency === 'USDT');
-              if (usdtItem) {
-                futuresUsdt = Number(usdtItem.availableBalance ?? usdtItem.equity ?? usdtItem.positionMargin ?? 0);
-              }
+              if (usdtItem) futuresUsdt = parseFutItem(usdtItem);
               const usdcItem = dataArr.find((item: any) => item.currency === 'USDC');
-              if (usdcItem) {
-                futuresUsdc = Number(usdcItem.availableBalance ?? usdcItem.equity ?? usdcItem.positionMargin ?? 0);
-              }
+              if (usdcItem) futuresUsdc = parseFutItem(usdcItem);
             }
           } catch (contractErr: any) {
             console.warn(`⚠️ Erro contractPrivateGetAccountAssets:`, contractErr?.message);
@@ -168,11 +175,15 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
         // Fallback MEXC Futures (info.data)
         if (futuresUsdt === 0 && futBal.info) {
-          const dataArr = Array.isArray(futBal.info.data) ? futBal.info.data : (Array.isArray(futBal.info?.balances) ? futBal.info.balances : []);
+          const dataArr = Array.isArray(futBal.info)
+            ? futBal.info
+            : (Array.isArray(futBal.info.data) ? futBal.info.data : (Array.isArray(futBal.info?.balances) ? futBal.info.balances : []));
+
           const itemT = dataArr.find((b: any) => b.currency === 'USDT' || b.asset === 'USDT');
-          if (itemT) futuresUsdt = Number(itemT.availableBalance || itemT.equity || itemT.free || 0);
+          if (itemT) futuresUsdt = parseFutItem(itemT);
+
           const itemC = dataArr.find((b: any) => b.currency === 'USDC' || b.asset === 'USDC');
-          if (itemC) futuresUsdc = Number(itemC.availableBalance || itemC.equity || itemC.free || 0);
+          if (itemC) futuresUsdc = parseFutItem(itemC);
         }
 
         console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) Futures -> USDT: ${futuresUsdt}, USDC: ${futuresUsdc}`);
