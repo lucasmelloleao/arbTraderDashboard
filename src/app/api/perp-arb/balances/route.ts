@@ -26,8 +26,10 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get('refresh') === 'true';
 
-    // ⚡ Retorno Instantâneo: Sempre retorna os saldos gravados no MongoDB por padrão (tempo de resposta < 10ms)
-    if (!forceRefresh) {
+    const hasAnyBalance = keys.some((k: any) => (k.spotUsdt || 0) + (k.spotUsdc || 0) + (k.futuresUsdt || 0) + (k.futuresUsdc || 0) > 0 || k.balancesUpdatedAt);
+
+    // ⚡ Retorno Instantâneo: Retorna o saldo em cache se houver dados gravados no banco (e forceRefresh não for exigido)
+    if (hasAnyBalance && !forceRefresh) {
       let spotUsdtTotal = 0;
       let spotUsdcTotal = 0;
       let futuresUsdtTotal = 0;
