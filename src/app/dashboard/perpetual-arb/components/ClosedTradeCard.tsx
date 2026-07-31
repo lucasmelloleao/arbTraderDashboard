@@ -53,6 +53,8 @@ export function ClosedTradeCard({ trade, allTrades = [] }: ClosedTradeCardProps)
   });
 
   const fundingCollectedVal = matchingFundingTrades.reduce((acc, t) => acc + Number(t.pnl || 0), 0);
+  const fundingCountVal = matchingFundingTrades.reduce((acc, t) => acc + (t.fundingCount || (t.fundingHistory?.length ? t.fundingHistory.length : (t.pnl ? 1 : 0))), 0);
+  const fundingHistoryList = matchingFundingTrades.flatMap((t) => t.fundingHistory && t.fundingHistory.length > 0 ? t.fundingHistory : (t.pnl ? [{ amount: t.pnl, timestamp: t.createdAt }] : []));
 
   const openSpotPrice = matchingOpenTrade?.spotPrice;
   const openPerpPrice = matchingOpenTrade?.perpPrice;
@@ -186,17 +188,42 @@ export function ClosedTradeCard({ trade, allTrades = [] }: ClosedTradeCardProps)
             </div>
           </div>
 
-          {/* Funding Coletado no Período */}
-          <div className="flex items-center justify-between border-t border-white/5 pt-1.5">
+          {/* Funding Coletado no Período com Tooltip de Extrato */}
+          <div className="group relative flex items-center justify-between border-t border-white/5 pt-1.5 cursor-pointer">
             <div className="flex items-center gap-1.5 text-gray-300">
               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                🌾 Funding Coletado ({matchingFundingTrades.length} pagam.)
+                🌾 Funding Coletado ({fundingCountVal > 0 ? `${fundingCountVal} ${fundingCountVal === 1 ? 'colheita' : 'colheitas'}` : 'Acumulado'})
               </span>
               <span className="text-slate-400 text-[11px]">Acumulado Corretora</span>
             </div>
             <div className="font-mono font-bold text-cyan-300">
               +{fmtUSDT(fundingCollectedVal).replace('+', '')}
             </div>
+
+            {/* Hover Tooltip Extrato */}
+            {fundingHistoryList.length > 0 && (
+              <div className="pointer-events-none absolute bottom-full right-0 mb-2 hidden group-hover:block w-72 rounded-lg bg-slate-950 border border-cyan-500/40 p-3 shadow-2xl z-50 text-[11px] backdrop-blur-md">
+                <div className="font-semibold text-cyan-300 mb-1.5 border-b border-white/10 pb-1 flex justify-between">
+                  <span>🌾 Extrato de Colheitas ({fundingHistoryList.length})</span>
+                  <span>Valor</span>
+                </div>
+                <div className="max-h-44 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                  {fundingHistoryList.map((item: any, idx: number) => {
+                    const dateStr = item.timestamp
+                      ? new Date(item.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                      : `Colheita #${idx + 1}`;
+                    return (
+                      <div key={idx} className="flex justify-between items-center text-slate-300 font-mono text-[10px]">
+                        <span className="text-slate-400">{dateStr}</span>
+                        <span className="text-emerald-400 font-bold">
+                          +${Number(item.amount || item.pnl || 0).toFixed(4)} USDT
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

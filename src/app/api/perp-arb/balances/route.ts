@@ -23,7 +23,49 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       });
     }
 
-    const exchangePromises = keys.map(async (key) => {
+    const { searchParams } = new URL(req.url);
+    const forceRefresh = searchParams.get('refresh') === 'true';
+
+    // ⚡ Retorno Instantâneo: Sempre retorna os saldos gravados no MongoDB por padrão (tempo de resposta < 10ms)
+    if (!forceRefresh) {
+      let spotUsdtTotal = 0;
+      let spotUsdcTotal = 0;
+      let futuresUsdtTotal = 0;
+      let futuresUsdcTotal = 0;
+
+      const exchanges = keys.map((k: any) => {
+        const spotUsdt = Number(k.spotUsdt || 0);
+        const spotUsdc = Number(k.spotUsdc || 0);
+        const futuresUsdt = Number(k.futuresUsdt || 0);
+        const futuresUsdc = Number(k.futuresUsdc || 0);
+
+        spotUsdtTotal += spotUsdt;
+        spotUsdcTotal += spotUsdc;
+        futuresUsdtTotal += futuresUsdt;
+        futuresUsdcTotal += futuresUsdc;
+
+        return {
+          id: k._id,
+          name: k.name,
+          exchangeId: k.exchangeId,
+          spotUsdt,
+          spotUsdc,
+          futuresUsdt,
+          futuresUsdc,
+          updatedAt: k.balancesUpdatedAt,
+        };
+      });
+
+      return NextResponse.json({
+        success: true,
+        spotUsdt: spotUsdtTotal,
+        spotUsdc: spotUsdcTotal,
+        futuresUsdt: futuresUsdtTotal,
+        futuresUsdc: futuresUsdcTotal,
+        exchanges,
+        cached: true,
+      });
+    }
       const exId = String(key.exchangeId || '').toLowerCase().trim();
       const ccxtId = exId === 'gateio' ? 'gate' : exId;
 
@@ -133,6 +175,12 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       } catch (futErr: any) {
         console.error(`❌ Erro ao buscar saldo Futuros [${key.name} - ${exId}]:`, futErr?.message);
       }
+
+      try {
+        await ExchangeKey.findByIdAndUpdate(key._id, {
+          $set: { spotUsdt, spotUsdc, futuresUsdt, futuresUsdc, balancesUpdatedAt: new Date() }
+        });
+      } catch {}
 
       return {
         id: key._id,

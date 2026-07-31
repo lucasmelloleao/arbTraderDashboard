@@ -7,6 +7,11 @@ const ExchangeKeySchema = new mongoose.Schema({
   apiKey: { type: String, required: true },
   apiSecret: { type: String, required: true },
   active: { type: Boolean, default: true },
+  spotUsdt: { type: Number, default: 0 },
+  spotUsdc: { type: Number, default: 0 },
+  futuresUsdt: { type: Number, default: 0 },
+  futuresUsdc: { type: Number, default: 0 },
+  balancesUpdatedAt: { type: Date },
   createdAt: { type: Date, default: Date.now }
 });
 

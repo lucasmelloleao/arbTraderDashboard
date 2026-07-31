@@ -13,6 +13,12 @@ const PerpArbTradeSchema = new mongoose.Schema({
   fundingPct: { type: Number },
   amount: { type: Number, required: true }, // in USDT
   pnl: { type: Number, default: null },     // realized P&L in USDT
+  fundingCount: { type: Number, default: 0 },
+  fundingHistory: [{
+    amount: { type: Number },
+    timestamp: { type: Date },
+    fundingRate: { type: Number }
+  }],
   status: {
     type: String,
     default: 'detected'

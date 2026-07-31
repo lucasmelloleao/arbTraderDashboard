@@ -70,7 +70,10 @@ export function OpenPositionCard({
   const accumulatedFundingTrades = stratTrades.filter((t) => t.type === 'funding_fee_accumulated');
   const sumAccumulatedFunding = accumulatedFundingTrades.reduce((acc, trade) => acc + Number(trade.pnl || 0), 0);
 
-  const fundingCollected = Number(s.fundingCollected || 0) || sumAccumulatedFunding;
+  const fundingCount = s.fundingCount || (s.fundingHistory?.length ?? accumulatedFundingTrades.length);
+  const fundingHistoryList = (s.fundingHistory && s.fundingHistory.length > 0)
+    ? s.fundingHistory
+    : accumulatedFundingTrades.flatMap((t: any) => t.fundingHistory || [{ amount: t.pnl, timestamp: t.createdAt }]);
 
   const estimatedTradingFees = positionSize * 0.0012;
   const totalUnrealizedPnL = marketPnL + fundingCollected;
@@ -172,12 +175,42 @@ export function OpenPositionCard({
           </div>
         </div>
 
-        {/* Funding Rate Coletado */}
-        <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
-          <span className="text-gray-400">🌾 Funding Coletado Acumulado:</span>
+        {/* Funding Rate Coletado com Tooltip de Extrato */}
+        <div className="group relative pt-2 border-t border-white/5 flex items-center justify-between text-[11px] cursor-pointer">
+          <span className="text-gray-400 flex items-center gap-1.5">
+            🌾 Funding Coletado:
+            <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 text-[10px] font-bold border border-cyan-500/30">
+              {fundingCount} {fundingCount === 1 ? 'colheita' : 'colheitas'}
+            </span>
+          </span>
           <span className="text-cyan-300 font-bold font-mono">
             +${fundingCollected.toFixed(4)} USDT
           </span>
+
+          {/* Hover Tooltip Extrato */}
+          {fundingHistoryList.length > 0 && (
+            <div className="pointer-events-none absolute bottom-full right-0 mb-2 hidden group-hover:block w-72 rounded-lg bg-slate-950 border border-cyan-500/40 p-3 shadow-2xl z-50 text-[11px] backdrop-blur-md">
+              <div className="font-semibold text-cyan-300 mb-1.5 border-b border-white/10 pb-1 flex justify-between">
+                <span>🌾 Extrato de Colheitas ({fundingHistoryList.length})</span>
+                <span>Valor</span>
+              </div>
+              <div className="max-h-44 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                {fundingHistoryList.map((item: any, idx: number) => {
+                  const dateStr = item.timestamp
+                    ? new Date(item.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                    : `Colheita #${idx + 1}`;
+                  return (
+                    <div key={idx} className="flex justify-between items-center text-slate-300 font-mono text-[10px]">
+                      <span className="text-slate-400">{dateStr}</span>
+                      <span className="text-emerald-400 font-bold">
+                        +${Number(item.amount || item.pnl || 0).toFixed(4)} USDT
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Status de Break-even / Cobertura de Taxas */}
@@ -230,7 +263,7 @@ export function OpenPositionCard({
           <div className="flex items-center justify-between border-t border-white/5 pt-1.5">
             <div className="flex items-center gap-1.5 text-gray-300">
               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                🌾 Funding Coletado ({accumulatedFundingTrades.length > 0 ? `${accumulatedFundingTrades.length} colheitas` : 'Acumulado'})
+                🌾 Funding Coletado ({fundingCount > 0 ? `${fundingCount} ${fundingCount === 1 ? 'colheita' : 'colheitas'}` : 'Acumulado'})
               </span>
               <span className="text-slate-400 text-[11px]">Pagamento Corretora</span>
             </div>

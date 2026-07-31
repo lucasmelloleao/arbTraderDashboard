@@ -26,6 +26,13 @@ const PerpArbStrategySchema = new mongoose.Schema({
   currentFundingRate: { type: Number, default: null }, // latest observed funding rate
   lastSpotPrice: { type: Number, default: null },      // latest observed spot market price
   lastPerpPrice: { type: Number, default: null },      // latest observed perp market price
+  fundingCollected: { type: Number, default: 0 },
+  fundingCount: { type: Number, default: 0 },
+  fundingHistory: [{
+    amount: { type: Number },
+    timestamp: { type: Date },
+    fundingRate: { type: Number }
+  }],
   dailyLossAccum: { type: Number, default: 0 },        // accumulated loss today (USDT)
   lastLossAt: { type: Date, default: null },            // timestamp of last loss — for cooldown
 }, {

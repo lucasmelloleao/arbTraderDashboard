@@ -19,6 +19,8 @@ export interface PerpArbStrategy {
   lastSpotPrice?: number;
   lastPerpPrice?: number;
   fundingCollected?: number;
+  fundingCount?: number;
+  fundingHistory?: Array<{ amount: number; timestamp: string | Date; fundingRate?: number }>;
   spotExchangeKeyId?: any;
   perpExchangeKeyId?: any;
   createdAt?: string | Date;
@@ -43,6 +45,8 @@ export interface PerpArbTrade {
   amount?: number;
   status: string;
   pnl?: number;
+  fundingCount?: number;
+  fundingHistory?: Array<{ amount: number; timestamp: string | Date; fundingRate?: number }>;
   reason?: string;
   errorMessage?: string;
   openedAt?: string | Date;
