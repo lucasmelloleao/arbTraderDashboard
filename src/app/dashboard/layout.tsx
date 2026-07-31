@@ -46,8 +46,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: '/dashboard/transactions', label: 'Transactions', icon: History },
     { href: '/dashboard/flash-loan', label: 'Flash Loans', icon: Zap },
     { href: '/dashboard/scalping', label: 'Scalping', icon: Activity },
-    { href: '/dashboard/exchanges', label: 'Exchanges (CEX)', icon: Wallet },
-    { href: '/dashboard/perpetual-arb', label: 'Perpetual Arb', icon: TrendingUp },
     { href: '/dashboard/trending', label: 'Trending Coins', icon: TrendingUp },
   ];
 
