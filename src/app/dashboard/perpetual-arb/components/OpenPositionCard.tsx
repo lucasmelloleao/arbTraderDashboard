@@ -70,6 +70,7 @@ export function OpenPositionCard({
   const accumulatedFundingTrades = stratTrades.filter((t) => t.type === 'funding_fee_accumulated');
   const sumAccumulatedFunding = accumulatedFundingTrades.reduce((acc, trade) => acc + Number(trade.pnl || 0), 0);
 
+  const fundingCollected = Number(s.fundingCollected || 0) || sumAccumulatedFunding;
   const fundingCount = s.fundingCount || (s.fundingHistory?.length ?? accumulatedFundingTrades.length);
   const fundingHistoryList = (s.fundingHistory && s.fundingHistory.length > 0)
     ? s.fundingHistory

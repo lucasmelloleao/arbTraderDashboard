@@ -66,6 +66,8 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         cached: true,
       });
     }
+
+    const exchangePromises = keys.map(async (key) => {
       const exId = String(key.exchangeId || '').toLowerCase().trim();
       const ccxtId = exId === 'gateio' ? 'gate' : exId;
 
