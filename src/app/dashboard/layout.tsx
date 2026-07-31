@@ -165,8 +165,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
           <h2 className="text-lg font-medium text-white">Dashboard</h2>
         </header>
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="max-w-5xl mx-auto">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="w-full max-w-[1700px] mx-auto">
             {children}
           </div>
         </div>
