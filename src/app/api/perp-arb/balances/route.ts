@@ -119,7 +119,40 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           const itemC = balancesArr.find((b: any) => b.asset === 'USDC' || b.currency === 'USDC');
           if (itemC) spotUsdc = Number(itemC.free || itemC.availableBalance || itemC.equity || 0);
         }
-        console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) Spot -> USDT: ${spotUsdt}, USDC: ${spotUsdc}`);
+
+        // ── Converter o saldo de todas as altcoins em Spot para USDT ─────────────
+        const totals = spotBal.total || {};
+        const nonStableCodes = Object.keys(totals).filter(code => {
+          const amt = Number(totals[code] || 0);
+          return amt > 0 && code !== 'USDT' && code !== 'USDC';
+        });
+
+        if (nonStableCodes.length > 0) {
+          const tickersToFetch = nonStableCodes.map(code => `${code}/USDT`);
+          try {
+            const tickers = await spotEx.fetchTickers(tickersToFetch).catch(() => ({}));
+            for (const code of nonStableCodes) {
+              const amt = Number(totals[code] || 0);
+              const symbol = `${code}/USDT`;
+              const price = Number(tickers[symbol]?.last || tickers[symbol]?.close || tickers[symbol]?.bid || 0);
+              if (price > 0) {
+                spotUsdt += amt * price;
+              }
+            }
+          } catch {
+            for (const code of nonStableCodes) {
+              const amt = Number(totals[code] || 0);
+              try {
+                const ticker = await spotEx.fetchTicker(`${code}/USDT`);
+                const price = Number(ticker?.last || ticker?.close || 0);
+                if (price > 0) {
+                  spotUsdt += amt * price;
+                }
+              } catch {}
+            }
+          }
+        }
+        console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) Spot Total em USDT: ${spotUsdt}`);
       } catch (spotErr: any) {
         console.error(`❌ Erro ao buscar saldo Spot [${key.name} - ${exId}]:`, spotErr?.message);
       }

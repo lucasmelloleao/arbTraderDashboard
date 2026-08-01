@@ -107,6 +107,10 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         const totalFeePct = (perpFee + spotFee) * 100;
         const netFundingPct = fundingPct + spreadPct - totalFeePct;
 
+        const perpSlippage = pTicker.last && perpBid ? (Math.abs(pTicker.last - perpBid) / perpBid) * 100 : 0;
+        const spotSlippage = sTicker.last && spotAsk ? (Math.abs(sTicker.last - spotAsk) / spotAsk) * 100 : 0;
+        const estimatedSlippagePct = Math.max(perpSlippage, spotSlippage);
+
         opps.push({
           exchange: `${spotExId.toUpperCase()} (Spot) ⚡ ${perpExId.toUpperCase()} (Perp)`,
           spotExchange: spotExId,
@@ -119,6 +123,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           fundingPct,
           totalFeePct,
           netFundingPct,
+          estimatedSlippagePct,
           volume24h: pTicker.quoteVolume || sTicker.quoteVolume || 0,
         });
       }
@@ -222,6 +227,10 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
           const netFundingPct = fundingPct + spreadPct - totalFeePct;
 
+          const perpSlippage = pTicker.last && perpBid ? (Math.abs(pTicker.last - perpBid) / perpBid) * 100 : 0;
+          const spotSlippage = sTicker.last && spotAsk ? (Math.abs(sTicker.last - spotAsk) / spotAsk) * 100 : 0;
+          const estimatedSlippagePct = Math.max(perpSlippage, spotSlippage);
+
           opps.push({
             exchange: exId.toUpperCase(),
             spotExchange: exId,
@@ -234,6 +243,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
             fundingPct,
             totalFeePct,
             netFundingPct,
+            estimatedSlippagePct,
             volume24h: pTicker.quoteVolume || 0,
           });
         }
