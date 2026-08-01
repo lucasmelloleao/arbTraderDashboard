@@ -53,8 +53,8 @@ export function ClosedTradeCard({ trade, allTrades = [] }: ClosedTradeCardProps)
   });
 
   const fundingCollectedVal = matchingFundingTrades.reduce((acc, t) => acc + Number(t.pnl || 0), 0);
-  const fundingCountVal = matchingFundingTrades.reduce((acc, t) => acc + (t.fundingCount || (t.fundingHistory?.length ? t.fundingHistory.length : (t.pnl ? 1 : 0))), 0);
   const fundingHistoryList = matchingFundingTrades.flatMap((t) => t.fundingHistory && t.fundingHistory.length > 0 ? t.fundingHistory : (t.pnl ? [{ amount: t.pnl, timestamp: t.createdAt }] : []));
+  const fundingCountVal = fundingHistoryList.length || matchingFundingTrades.reduce((acc, t) => acc + (t.fundingCount || (t.fundingHistory?.length ? t.fundingHistory.length : (t.pnl ? 1 : 0))), 0);
 
   const openSpotPrice = matchingOpenTrade?.spotPrice;
   const openPerpPrice = matchingOpenTrade?.perpPrice;

@@ -71,10 +71,10 @@ export function OpenPositionCard({
   const sumAccumulatedFunding = accumulatedFundingTrades.reduce((acc, trade) => acc + Number(trade.pnl || 0), 0);
 
   const fundingCollected = Number(s.fundingCollected || 0) || sumAccumulatedFunding;
-  const fundingCount = s.fundingCount || (s.fundingHistory?.length ?? accumulatedFundingTrades.length);
   const fundingHistoryList = (s.fundingHistory && s.fundingHistory.length > 0)
     ? s.fundingHistory
     : accumulatedFundingTrades.flatMap((t: any) => t.fundingHistory || [{ amount: t.pnl, timestamp: t.createdAt }]);
+  const fundingCount = fundingHistoryList.length || s.fundingCount || (s.fundingHistory?.length ?? accumulatedFundingTrades.length);
 
   const estimatedTradingFees = positionSize * 0.0012;
   const totalUnrealizedPnL = marketPnL + fundingCollected;
