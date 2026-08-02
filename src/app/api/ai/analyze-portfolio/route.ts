@@ -179,7 +179,7 @@ ${JSON.stringify(contextData, null, 2)}
   - **Spot Livre em USDT**: $${keys.reduce((a, k) => a + (k.spotUsdt || 0), 0).toFixed(2)} USDT
   - **Futuros Livre em USDT**: $${keys.reduce((a, k) => a + (k.futuresUsdt || 0), 0).toFixed(2)} USDT
 - **Recomendação de Alocação**:
-  - Manter o aporte padrão por ordem em **$${settings?.tradeSize || 50} USDT** (`tradeSize`).
+  - Manter o aporte padrão por ordem em **$${settings?.tradeSize || 50} USDT** (tradeSize).
   - Priorizar entradas em pares com Funding superior a **0.05%** e Spread positivo ($\ge$ +0.20%) para aceleração do breakeven.
 `;
     }
