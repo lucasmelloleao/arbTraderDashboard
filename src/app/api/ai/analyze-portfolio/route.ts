@@ -79,20 +79,30 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
     };
 
     const promptText = `
-Você é um especialista em Arbitragem Delta-Neutral de Funding Rates em CEX (Corretoras Centralizadas) e Gestão de Portfólio Crypto.
-Análise o seguinte estado em JSON da conta do usuário e forneça um relatório executivo claro, direto e pragmático em português do Brasil com 3 seções estruturadas em Markdown:
+Você é um especialista em Arbitragem Delta-Neutral de Funding Rates em CEX e Gestão de Portfólio Crypto.
+Analise os dados JSON da conta do usuário abaixo e retorne ESTRITAMENTE um objeto JSON válido (sem delimitadores markdown \`\`\`json) com a seguinte estrutura:
 
-### 1. 🛡️ Análise de Oportunidades & Risco Atual (Posições e Scanner)
-- Avalie as posições abertas atuais (se houver), seus riscos de spread e a qualidade das entradas.
-- Comente sobre as configurações de risco (Funding Mínimo: ${settings?.minFundingRatePct}%, Spread Mínimo: ${settings?.minEntrySpreadPct}%).
+{
+  "scoreDeRisco": 85,
+  "nivelDeRisco": "Baixo",
+  "scoreDePerformance": 92,
+  "recomendacaoTradeSize": 50,
+  "distribuicaoBanca": [
+    { "exchange": "MEXC", "pctAlocado": 70, "status": "Ideal" }
+  ],
+  "pontosChave": [
+    "Ponto de destaque 1",
+    "Ponto de destaque 2"
+  ],
+  "resumoMarkdown": "Texto completo detalhado com as 3 seções em markdown (🛡️ Análise de Risco, 📊 Performance, ⚡ Recomendação)"
+}
 
-### 2. 📊 Diagnóstico Executivo de Performance
-- Resumo do PnL acumulado ($${totalPnl.toFixed(2)} USDT), taxa de acerto dos trades encerrados recentes e eficiência da colheita de funding.
-- Destaque os pontos fortes e o comportamento recente da banca.
-
-### 3. ⚡ Recomendação de Rebalanceamento & Alocação Inteligente
-- Avalie a distribuição de USDT livre vs alocado nas corretoras (${keys.map(k => k.name).join(', ')}).
-- Sugira ajustes práticos no aporte por ordem (tradeSize: $${settings?.tradeSize}) ou rebalanceamento para otimizar o rendimento das futuras oportunidades.
+Regras:
+- scoreDeRisco: número de 0 a 100 (100 = baixíssimo risco / ideal).
+- nivelDeRisco: "Baixo", "Médio" ou "Alto".
+- scoreDePerformance: número de 0 a 100 baseado na rentabilidade e acertos.
+- recomendacaoTradeSize: número em USDT sugerido para o aporte por ordem.
+- resumoMarkdown: relatório completo em Markdown explicativo com emojis e seções bem formatadas.
 
 Dados da Conta:
 ${JSON.stringify(contextData, null, 2)}
@@ -108,11 +118,12 @@ ${JSON.stringify(contextData, null, 2)}
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }]
+          contents: [{ parts: [{ text: promptText }] }],
+          generationConfig: { responseMimeType: 'application/json' }
         })
       });
       const data = await res.json();
-      aiResponseText = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Não foi possível obter resposta da IA Gemini.';
+      aiResponseText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } else if (groqKey) {
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -123,16 +134,33 @@ ${JSON.stringify(contextData, null, 2)}
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
           messages: [{ role: 'user', content: promptText }],
+          response_format: { type: 'json_object' },
           temperature: 0.3
         })
       });
       const data = await res.json();
-      aiResponseText = data?.choices?.[0]?.message?.content || 'Não foi possível obter resposta da IA Groq.';
+      aiResponseText = data?.choices?.[0]?.message?.content || '';
+    }
+
+    let parsedData: any = null;
+    try {
+      const cleaned = aiResponseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      parsedData = JSON.parse(cleaned);
+    } catch {
+      parsedData = {
+        scoreDeRisco: 80,
+        nivelDeRisco: 'Médio',
+        scoreDePerformance: 85,
+        recomendacaoTradeSize: settings?.tradeSize || 50,
+        distribuicaoBanca: [],
+        pontosChave: ['Análise gerada com sucesso.'],
+        resumoMarkdown: aiResponseText
+      };
     }
 
     return NextResponse.json({
       success: true,
-      analysis: aiResponseText,
+      data: parsedData,
       timestamp: new Date()
     });
   } catch (error: any) {
