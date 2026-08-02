@@ -15,6 +15,7 @@ import { ConfirmModal } from './components/modals/ConfirmModal';
 import { StrategyFormModal } from './components/modals/StrategyFormModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { ManualScanModal } from './components/modals/ManualScanModal';
+import { AiAdvisorCard } from './components/AiAdvisorCard';
 
 function getToken(): string {
   if (typeof window === 'undefined') return '';
@@ -460,6 +461,9 @@ export default function PerpetualArbPage() {
           <button onClick={() => setSuccessMsg(null)} className="text-emerald-300 underline font-semibold text-xs">Fechar</button>
         </div>
       )}
+
+      {/* Card da IA Copilot */}
+      <AiAdvisorCard />
 
       {/* Stats Cards */}
       <StatsHeader
