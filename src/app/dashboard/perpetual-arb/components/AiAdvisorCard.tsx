@@ -178,11 +178,23 @@ export function AiAdvisorCard() {
             </div>
           </div>
 
+          {/* Síntese Explicativa Direta em Texto */}
+          {data.sinteseExecutiva && (
+            <div className="bg-slate-950/80 border border-cyan-500/20 p-4 rounded-xl">
+              <h4 className="text-xs font-extrabold uppercase tracking-widest text-cyan-400 mb-1 flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-cyan-300" /> Parecer da Inteligência Artificial
+              </h4>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                {data.sinteseExecutiva}
+              </p>
+            </div>
+          )}
+
           {/* Destaques Rápidos em Badges */}
           {Array.isArray(data.pontosChave) && data.pontosChave.length > 0 && (
             <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex flex-wrap gap-2 items-center">
               <span className="text-xs font-bold text-slate-400 mr-1 flex items-center gap-1">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Highlights:
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Destaques:
               </span>
               {data.pontosChave.map((pt: string, idx: number) => (
                 <span key={idx} className="px-2.5 py-1 bg-slate-900 border border-slate-700/80 rounded-lg text-xs font-medium text-slate-200">
@@ -194,11 +206,14 @@ export function AiAdvisorCard() {
         </div>
       )}
 
-      {/* Relatório Detalhado em Texto Expandível */}
+      {/* Relatório Completo Estruturado Expandível */}
       {expanded && data?.resumoMarkdown && (
-        <div className="mt-4 pt-3 border-t border-cyan-500/20 text-xs sm:text-sm text-slate-200 leading-relaxed font-sans">
-          <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 font-mono whitespace-pre-wrap">
-            {data.resumoMarkdown}
+        <div className="mt-4 pt-3 border-t border-cyan-500/20 text-xs sm:text-sm text-slate-200 leading-relaxed font-sans space-y-3">
+          <div className="bg-slate-950/90 p-4 rounded-xl border border-slate-800 text-slate-300 leading-relaxed">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Relatório Técnico Detalhado</h4>
+            <div className="prose prose-invert max-w-none text-xs sm:text-sm whitespace-pre-wrap font-sans">
+              {data.resumoMarkdown}
+            </div>
           </div>
         </div>
       )}

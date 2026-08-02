@@ -87,12 +87,13 @@ Analise os dados JSON da conta do usuário abaixo e retorne ESTRITAMENTE um obje
   "nivelDeRisco": "Baixo",
   "scoreDePerformance": 92,
   "recomendacaoTradeSize": 50,
+  "sinteseExecutiva": "A banca está bem protegida em arbitragem delta-neutral com posições ativas em FARTCOIN e MYX gerando taxas diárias. O spread da MEXC está convergindo com segurança e recomenda-se manter a entrada mínima em 0.20%.",
   "distribuicaoBanca": [
     { "exchange": "MEXC", "pctAlocado": 70, "status": "Ideal" }
   ],
   "pontosChave": [
-    "Ponto de destaque 1",
-    "Ponto de destaque 2"
+    "Proteção Delta-Neutral 100% ativa",
+    "Spread de entrada de 0.20% é ideal para cobrir taxas"
   ],
   "resumoMarkdown": "Texto completo detalhado com as 3 seções em markdown (🛡️ Análise de Risco, 📊 Performance, ⚡ Recomendação)"
 }
