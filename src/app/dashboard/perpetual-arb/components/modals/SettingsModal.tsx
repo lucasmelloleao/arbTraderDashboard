@@ -88,6 +88,21 @@ export function SettingsModal({
         </div>
 
         <div>
+          <span className="block text-xs text-slate-500 mb-1">Spread Mínimo Entrada (%)</span>
+          {!isEditingSettings ? (
+            <span className="font-bold text-emerald-400">{settings.minEntrySpreadPct ?? 0}%</span>
+          ) : (
+            <input
+              type="number"
+              step="0.01"
+              value={settingsForm.minEntrySpreadPct ?? 0}
+              onChange={e => onUpdateSettingsForm({ ...settingsForm, minEntrySpreadPct: Number(e.target.value) })}
+              className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white"
+            />
+          )}
+        </div>
+
+        <div>
           <span className="block text-xs text-slate-500 mb-1">Vol 24h Mínimo (USDT)</span>
           {!isEditingSettings ? (
             <span className="font-bold text-white">${settings.minVolume24hUSD?.toLocaleString()}</span>

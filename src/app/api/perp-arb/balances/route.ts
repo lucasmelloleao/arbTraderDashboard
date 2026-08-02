@@ -35,6 +35,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       let spotTotalEquitySum = 0;
       let futuresUsdtTotal = 0;
       let futuresUsdcTotal = 0;
+      let futuresTotalEquitySum = 0;
 
       const exchanges = keys.map((k: any) => {
         const spotUsdt = Number(k.spotUsdt || 0);
@@ -42,12 +43,14 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         const spotTotalEquity = Number(k.spotTotalEquity || (spotUsdt + spotUsdc));
         const futuresUsdt = Number(k.futuresUsdt || 0);
         const futuresUsdc = Number(k.futuresUsdc || 0);
+        const futuresTotalEquity = Number(k.futuresTotalEquity || (futuresUsdt + futuresUsdc));
 
         spotUsdtTotal += spotUsdt;
         spotUsdcTotal += spotUsdc;
         spotTotalEquitySum += spotTotalEquity;
         futuresUsdtTotal += futuresUsdt;
         futuresUsdcTotal += futuresUsdc;
+        futuresTotalEquitySum += futuresTotalEquity;
 
         return {
           id: k._id,
@@ -58,6 +61,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           spotTotalEquity,
           futuresUsdt,
           futuresUsdc,
+          futuresTotalEquity,
           updatedAt: k.balancesUpdatedAt,
         };
       });
@@ -69,6 +73,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         spotTotalEquity: spotTotalEquitySum,
         futuresUsdt: futuresUsdtTotal,
         futuresUsdc: futuresUsdcTotal,
+        futuresTotalEquity: futuresTotalEquitySum,
         exchanges,
         cached: true,
       });
@@ -79,7 +84,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       const ccxtId = exId === 'gateio' ? 'gate' : exId;
 
       if (!(ccxt as any)[ccxtId]) {
-        return { id: key._id, name: key.name, spotUsdt: 0, spotUsdc: 0, futuresUsdt: 0, futuresUsdc: 0 };
+        return { id: key._id, name: key.name, spotUsdt: 0, spotUsdc: 0, futuresUsdt: 0, futuresUsdc: 0, futuresTotalEquity: 0 };
       }
 
       let apiSecret = key.apiSecret;
@@ -101,6 +106,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       let spotUsdc = 0;
       let futuresUsdt = 0;
       let futuresUsdc = 0;
+      let futuresTotalEquity = 0;
 
       // 1. Fetch Spot Balance
       try {
@@ -134,28 +140,27 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         });
 
         if (nonStableCodes.length > 0) {
-          const tickersToFetch = nonStableCodes.map(code => `${code}/USDT`);
           try {
+            const tickersToFetch = nonStableCodes.map(code => `${code}/USDT`);
             const tickers = await spotEx.fetchTickers(tickersToFetch).catch(() => ({}));
             for (const code of nonStableCodes) {
               const amt = Number(totals[code] || 0);
               const symbol = `${code}/USDT`;
-              const price = Number(tickers[symbol]?.last || tickers[symbol]?.close || tickers[symbol]?.bid || 0);
+              let price = Number(tickers[symbol]?.last || tickers[symbol]?.close || tickers[symbol]?.bid || 0);
+              if (price === 0) {
+                const ticker = await spotEx.fetchTicker(`${code}/USDT`).catch(() => null);
+                price = Number(ticker?.last || ticker?.close || 0);
+              }
               if (price > 0) {
                 spotTotalEquity += amt * price;
+              } else {
+                // Se a moeda não tiver par USDT (ex: tokens menores), preserva um valor mínimo ou estimativa se fornecida pelo CCXT
+                const codeUsd = Number(spotBal[code]?.usdValue || spotBal[code]?.total || 0);
+                if (codeUsd > 0) spotTotalEquity += codeUsd;
               }
             }
-          } catch {
-            for (const code of nonStableCodes) {
-              const amt = Number(totals[code] || 0);
-              try {
-                const ticker = await spotEx.fetchTicker(`${code}/USDT`);
-                const price = Number(ticker?.last || ticker?.close || 0);
-                if (price > 0) {
-                  spotTotalEquity += amt * price;
-                }
-              } catch {}
-            }
+          } catch (altErr: any) {
+            console.warn(`⚠️ Erro ao converter moedas spot de ${key.name}:`, altErr?.message);
           }
         }
 
@@ -177,57 +182,77 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
         const futBal = await futEx.fetchBalance();
 
-        // Debug raw response keys
-        console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) FutBal keys:`, Object.keys(futBal));
-        if (futBal.info) {
-          console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) FutBal info sample:`, JSON.stringify(futBal.info).slice(0, 300));
-        }
+        const freeT = Number(futBal.free?.USDT ?? futBal.USDT?.free ?? 0);
+        const totalT = Number(futBal.total?.USDT ?? futBal.USDT?.total ?? 0);
+        futuresUsdt = freeT;
 
-        const freeT = Number(futBal.free?.USDT || futBal.USDT?.free || 0);
-        const totalT = Number(futBal.total?.USDT || futBal.USDT?.total || 0);
-        futuresUsdt = Math.max(freeT, totalT);
+        const freeC = Number(futBal.free?.USDC ?? futBal.USDC?.free ?? 0);
+        const totalC = Number(futBal.total?.USDC ?? futBal.USDC?.total ?? 0);
+        futuresUsdc = freeC;
 
-        const freeC = Number(futBal.free?.USDC || futBal.USDC?.free || 0);
-        const totalC = Number(futBal.total?.USDC || futBal.USDC?.total || 0);
-        futuresUsdc = Math.max(freeC, totalC);
-
-        function parseFutItem(item: any): number {
+        function parseFutEquity(item: any): number {
           if (!item) return 0;
-          const eq = Number(item.equity || item.total || item.cashBalance || 0);
+          const eq = Number(item.equity || item.total || item.equityUsd || item.cashBalance || 0);
           if (eq > 0) return eq;
-          return Number(item.availableBalance || item.free || 0) + Number(item.positionMargin || item.frozenBalance || item.used || 0);
+          const avail = Number(item.availableBalance || item.free || 0);
+          const frozen = Number(item.positionMargin || item.frozenBalance || item.used || item.margin || 0);
+          const unrealizedPnl = Number(item.unrealizedProfit || item.unrealisedPnl || item.unrealizedPnl || 0);
+          return avail + frozen + unrealizedPnl;
         }
+
+        function parseFutFree(item: any): number {
+          if (!item) return 0;
+          return Number(item.availableBalance || item.free || item.availableMargin || 0);
+        }
+
+        futuresTotalEquity = totalT > 0 ? totalT : parseFutEquity(futBal.USDT);
 
         // Direct MEXC Contract API fallback if available
-        if (futuresUsdt === 0 && (futEx as any).contractPrivateGetAccountAssets) {
+        if ((futEx as any).contractPrivateGetAccountAssets) {
           try {
             const assetsRes = await (futEx as any).contractPrivateGetAccountAssets();
             const dataArr = assetsRes?.data || assetsRes?.data?.data || assetsRes;
             if (Array.isArray(dataArr)) {
               const usdtItem = dataArr.find((item: any) => item.currency === 'USDT');
-              if (usdtItem) futuresUsdt = parseFutItem(usdtItem);
+              if (usdtItem) {
+                if (futuresUsdt === 0) futuresUsdt = parseFutFree(usdtItem);
+                const eq = parseFutEquity(usdtItem);
+                if (eq > futuresTotalEquity) futuresTotalEquity = eq;
+              }
               const usdcItem = dataArr.find((item: any) => item.currency === 'USDC');
-              if (usdcItem) futuresUsdc = parseFutItem(usdcItem);
+              if (usdcItem) {
+                if (futuresUsdc === 0) futuresUsdc = parseFutFree(usdcItem);
+              }
             }
           } catch (contractErr: any) {
             console.warn(`⚠️ Erro contractPrivateGetAccountAssets:`, contractErr?.message);
           }
         }
 
-        // Fallback MEXC Futures (info.data)
-        if (futuresUsdt === 0 && futBal.info) {
+        // Fallback MEXC / Bitget Futures (info.data)
+        if (futBal.info) {
           const dataArr = Array.isArray(futBal.info)
             ? futBal.info
             : (Array.isArray(futBal.info.data) ? futBal.info.data : (Array.isArray(futBal.info?.balances) ? futBal.info.balances : []));
 
           const itemT = dataArr.find((b: any) => b.currency === 'USDT' || b.asset === 'USDT');
-          if (itemT) futuresUsdt = parseFutItem(itemT);
+          if (itemT) {
+            if (futuresUsdt === 0) futuresUsdt = parseFutFree(itemT);
+            const eq = parseFutEquity(itemT);
+            if (eq > futuresTotalEquity) futuresTotalEquity = eq;
+          }
 
           const itemC = dataArr.find((b: any) => b.currency === 'USDC' || b.asset === 'USDC');
-          if (itemC) futuresUsdc = parseFutItem(itemC);
+          if (itemC) {
+            if (futuresUsdc === 0) futuresUsdc = parseFutFree(itemC);
+          }
         }
 
-        console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) Futures -> USDT: ${futuresUsdt}, USDC: ${futuresUsdc}`);
+        if (futuresTotalEquity === 0) {
+          futuresTotalEquity = futuresUsdt + futuresUsdc;
+        }
+
+        console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) Futures -> Available USDT: ${futuresUsdt}, Total Equity: ${futuresTotalEquity}`);
       } catch (futErr: any) {
         console.error(`❌ Erro ao buscar saldo Futuros [${key.name} - ${exId}]:`, futErr?.message);
       }
@@ -235,7 +260,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       try {
         const spotTotalEquity = (key as any).spotTotalEquity || (spotUsdt + spotUsdc);
         await ExchangeKey.findByIdAndUpdate(key._id, {
-          $set: { spotUsdt, spotUsdc, spotTotalEquity, futuresUsdt, futuresUsdc, balancesUpdatedAt: new Date() }
+          $set: { spotUsdt, spotUsdc, spotTotalEquity, futuresUsdt, futuresUsdc, futuresTotalEquity, balancesUpdatedAt: new Date() }
         });
       } catch {}
 
@@ -248,6 +273,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         spotTotalEquity: (key as any).spotTotalEquity || (spotUsdt + spotUsdc),
         futuresUsdt,
         futuresUsdc,
+        futuresTotalEquity,
       };
     });
 
@@ -258,6 +284,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     let spotTotalEquitySum = 0;
     let futuresUsdtTotal = 0;
     let futuresUsdcTotal = 0;
+    let futuresTotalEquitySum = 0;
 
     for (const d of validDetails) {
       spotUsdtTotal += d.spotUsdt || 0;
@@ -265,6 +292,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       spotTotalEquitySum += d.spotTotalEquity || (d.spotUsdt + d.spotUsdc) || 0;
       futuresUsdtTotal += d.futuresUsdt || 0;
       futuresUsdcTotal += d.futuresUsdc || 0;
+      futuresTotalEquitySum += d.futuresTotalEquity || (d.futuresUsdt + d.futuresUsdc) || 0;
     }
 
     return NextResponse.json({
@@ -274,6 +302,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       spotTotalEquity: spotTotalEquitySum,
       futuresUsdt: futuresUsdtTotal,
       futuresUsdc: futuresUsdcTotal,
+      futuresTotalEquity: futuresTotalEquitySum,
       exchanges: validDetails,
     });
   } catch (error: any) {

@@ -12,6 +12,7 @@ const PerpArbSettingsSchema = new mongoose.Schema({
   targetSpotBuyUSD: { type: Number, default: 1000 },
   maxDailyLoss: { type: Number, default: 10 },
   maxSlippagePct: { type: Number, default: 0.1 },
+  minEntrySpreadPct: { type: Number, default: 0.0 },
   allowedExchanges: { type: [String], default: [] }
 }, { timestamps: true });
 

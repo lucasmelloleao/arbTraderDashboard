@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { RefreshCw } from 'lucide-react';
 import {
   AreaChart,
   Area,
@@ -13,6 +14,7 @@ import {
 
 export default function DashboardOverview() {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [cexBalances, setCexBalances] = useState<any[]>([]);
   const [totalCexUsd, setTotalCexUsd] = useState<number | null>(null);
@@ -22,95 +24,98 @@ export default function DashboardOverview() {
   const [futuresUsdtOnly, setFuturesUsdtOnly] = useState<number>(0);
   const fetchedRef = useRef(false);
 
+  const fetchOverviewData = async (forceRefresh: boolean = false) => {
+    if (forceRefresh) setRefreshing(true);
+    else setLoading(true);
+
+    const token = localStorage.getItem('token');
+    const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
+
+    try {
+      // 1. Busca saldos atualizados das CEX
+      const url = forceRefresh ? '/api/perp-arb/balances?refresh=true' : '/api/perp-arb/balances';
+      const balancesRes = await fetch(url, authHeaders);
+      if (balancesRes.ok) {
+        const balData = await balancesRes.json();
+        if (balData.success && balData.exchanges) {
+          setCexBalances(balData.exchanges);
+          const spotUsdtVal = Number(balData.spotUsdt || 0);
+          const spotUsdcVal = Number(balData.spotUsdc || 0);
+          const futUsdtVal = Number(balData.futuresUsdt || 0);
+          const futUsdcVal = Number(balData.futuresUsdc || 0);
+
+          const spotTot = Number(balData.spotTotalEquity || (spotUsdtVal + spotUsdcVal));
+          const futTot = Number(balData.futuresTotalEquity || (futUsdtVal + futUsdcVal));
+
+          setSpotUsdtOnly(spotUsdtVal);
+          setFuturesUsdtOnly(futUsdtVal);
+          setTotalSpotUsd(spotTot);
+          setTotalFuturesUsd(futTot);
+          setTotalCexUsd(spotTot + futTot);
+        }
+      }
+
+      // 2. Busca histórico de evolução patrimonial
+      const historyRes = await fetch('/api/portfolio/history', authHeaders);
+      if (historyRes.ok) {
+        const history = await historyRes.json();
+        const chartDataMap: Record<string, any> = {};
+
+        if (Array.isArray(history)) {
+          history.forEach((snapshot: any) => {
+            const dateObj = new Date(snapshot.timestamp);
+            dateObj.setSeconds(0, 0);
+            const timeKey = dateObj.getTime();
+
+            if (!chartDataMap[timeKey]) {
+              chartDataMap[timeKey] = {
+                time: timeKey,
+                formattedTime: dateObj.toLocaleString(),
+                spotUsdValue: 0,
+                futuresUsdValue: 0,
+                totalUsdValue: 0,
+              };
+            }
+
+            let spot = 0;
+            let futures = 0;
+
+            if (Array.isArray(snapshot.balances) && snapshot.balances.length > 0) {
+              snapshot.balances.forEach((b: any) => {
+                const assetStr = String(b.asset || '').toLowerCase();
+                if (assetStr.includes('spot')) {
+                  spot += Number(b.usdValue || b.total || 0);
+                } else if (assetStr.includes('perp') || assetStr.includes('futures')) {
+                  futures += Number(b.usdValue || b.total || 0);
+                } else {
+                  spot += Number(b.usdValue || b.total || 0);
+                }
+              });
+            } else {
+              spot = Number(snapshot.totalUsdValue || 0);
+            }
+
+            chartDataMap[timeKey].spotUsdValue += spot;
+            chartDataMap[timeKey].futuresUsdValue += futures;
+            chartDataMap[timeKey].totalUsdValue += (spot + futures) || snapshot.totalUsdValue || 0;
+          });
+
+          const formattedChartData = Object.values(chartDataMap).sort((a: any, b: any) => a.time - b.time);
+          setHistoryData(formattedChartData);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao carregar dados do Overview:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
-
-    const fetchOverviewData = async () => {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
-
-      try {
-        // 1. Busca saldos atualizados das CEX
-        const balancesRes = await fetch('/api/perp-arb/balances?refresh=true', authHeaders);
-        if (balancesRes.ok) {
-          const balData = await balancesRes.json();
-          if (balData.success && balData.exchanges) {
-            setCexBalances(balData.exchanges);
-            const spotUsdtVal = Number(balData.spotUsdt || 0);
-            const spotUsdcVal = Number(balData.spotUsdc || 0);
-            const futUsdtVal = Number(balData.futuresUsdt || 0);
-            const futUsdcVal = Number(balData.futuresUsdc || 0);
-
-            const spotTot = Number(balData.spotTotalEquity || (spotUsdtVal + spotUsdcVal));
-            const futTot = futUsdtVal + futUsdcVal;
-
-            setSpotUsdtOnly(spotUsdtVal);
-            setFuturesUsdtOnly(futUsdtVal);
-            setTotalSpotUsd(spotTot);
-            setTotalFuturesUsd(futTot);
-            setTotalCexUsd(spotTot + futTot);
-          }
-        }
-
-        // 2. Busca histórico de evolução patrimonial
-        const historyRes = await fetch('/api/portfolio/history', authHeaders);
-        if (historyRes.ok) {
-          const history = await historyRes.json();
-          const chartDataMap: Record<string, any> = {};
-
-          if (Array.isArray(history)) {
-            history.forEach((snapshot: any) => {
-              const dateObj = new Date(snapshot.timestamp);
-              dateObj.setSeconds(0, 0);
-              const timeKey = dateObj.getTime();
-
-              if (!chartDataMap[timeKey]) {
-                chartDataMap[timeKey] = {
-                  time: timeKey,
-                  formattedTime: dateObj.toLocaleString(),
-                  spotUsdValue: 0,
-                  futuresUsdValue: 0,
-                  totalUsdValue: 0,
-                };
-              }
-
-              let spot = 0;
-              let futures = 0;
-
-              if (Array.isArray(snapshot.balances) && snapshot.balances.length > 0) {
-                snapshot.balances.forEach((b: any) => {
-                  const assetStr = String(b.asset || '').toLowerCase();
-                  if (assetStr.includes('spot')) {
-                    spot += Number(b.usdValue || b.total || 0);
-                  } else if (assetStr.includes('perp') || assetStr.includes('futures')) {
-                    futures += Number(b.usdValue || b.total || 0);
-                  } else {
-                    spot += Number(b.usdValue || b.total || 0);
-                  }
-                });
-              } else {
-                spot = Number(snapshot.totalUsdValue || 0);
-              }
-
-              chartDataMap[timeKey].spotUsdValue += spot;
-              chartDataMap[timeKey].futuresUsdValue += futures;
-              chartDataMap[timeKey].totalUsdValue += (spot + futures) || snapshot.totalUsdValue || 0;
-            });
-
-            const formattedChartData = Object.values(chartDataMap).sort((a: any, b: any) => a.time - b.time);
-            setHistoryData(formattedChartData);
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao carregar dados do Overview:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchOverviewData();
+    fetchOverviewData(false);
   }, []);
 
   return (
@@ -120,6 +125,14 @@ export default function DashboardOverview() {
           <h3 className="text-2xl font-bold text-white">Overview — Arbitragem CEX</h3>
           <p className="text-slate-400 text-sm">Resumo patrimonial e saldos das corretoras centralizadas</p>
         </div>
+        <button
+          onClick={() => fetchOverviewData(true)}
+          disabled={loading || refreshing}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-all disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Atualizando...' : 'Atualizar Saldos'}
+        </button>
       </div>
 
       {/* Cards de Resumo */}
@@ -265,8 +278,8 @@ export default function DashboardOverview() {
                 </tr>
               ) : (
                 cexBalances.map((ex, idx) => {
-                  const spotTotal = (ex.spotUsdt || 0) + (ex.spotUsdc || 0);
-                  const futTotal = (ex.futuresUsdt || 0) + (ex.futuresUsdc || 0);
+                  const spotTotal = Number(ex.spotTotalEquity || ((ex.spotUsdt || 0) + (ex.spotUsdc || 0)));
+                  const futTotal = Number(ex.futuresTotalEquity || ((ex.futuresUsdt || 0) + (ex.futuresUsdc || 0)));
                   const total = spotTotal + futTotal;
 
                   return (
