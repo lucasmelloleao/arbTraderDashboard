@@ -79,31 +79,28 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
     };
 
     const promptText = `
-Você é um especialista em Arbitragem Delta-Neutral de Funding Rates em CEX e Gestão de Portfólio Crypto.
-Analise os dados JSON da conta do usuário abaixo e retorne ESTRITAMENTE um objeto JSON válido (sem delimitadores markdown \`\`\`json) com a seguinte estrutura:
+Você é um especialista sênior em Arbitragem Delta-Neutral de Funding Rates em CEX e Gestão de Portfólio Crypto.
+Analise os dados JSON da conta do usuário abaixo e retorne ESTRITAMENTE um objeto JSON válido (sem delimitadores markdown \`\`\`json) preenchendo TODOS os campos obrigatórios abaixo:
 
 {
   "scoreDeRisco": 85,
   "nivelDeRisco": "Baixo",
   "scoreDePerformance": 92,
   "recomendacaoTradeSize": 50,
-  "sinteseExecutiva": "A banca está bem protegida em arbitragem delta-neutral com posições ativas em FARTCOIN e MYX gerando taxas diárias. O spread da MEXC está convergindo com segurança e recomenda-se manter a entrada mínima em 0.20%.",
+  "sinteseExecutiva": "Escreva aqui um parágrafo explicativo e direto sobre a saúde da conta, posições abertas e como o robô está se comportando.",
   "distribuicaoBanca": [
     { "exchange": "MEXC", "pctAlocado": 70, "status": "Ideal" }
   ],
   "pontosChave": [
-    "Proteção Delta-Neutral 100% ativa",
-    "Spread de entrada de 0.20% é ideal para cobrir taxas"
+    "Destaque principal 1",
+    "Destaque principal 2"
   ],
-  "resumoMarkdown": "Texto completo detalhado com as 3 seções em markdown (🛡️ Análise de Risco, 📊 Performance, ⚡ Recomendação)"
+  "resumoMarkdown": "### 🛡️ 1. Análise de Oportunidades & Risco Atual\\nDescreva detalhadamente a situação das posições abertas atuais (MYX, FARTCOIN), spreads de entrada e se o risco está controlado.\\n\\n### 📊 2. Diagnóstico Executivo de Performance\\nDescreva a performance recente de PnL e acerto de trades.\\n\\n### ⚡ 3. Recomendação de Rebalanceamento & Alocação Inteligente\\nRecomende ações práticas para os saldos livres e configurações do robô."
 }
 
-Regras:
-- scoreDeRisco: número de 0 a 100 (100 = baixíssimo risco / ideal).
-- nivelDeRisco: "Baixo", "Médio" ou "Alto".
-- scoreDePerformance: número de 0 a 100 baseado na rentabilidade e acertos.
-- recomendacaoTradeSize: número em USDT sugerido para o aporte por ordem.
-- resumoMarkdown: relatório completo em Markdown explicativo com emojis e seções bem formatadas.
+REGRAS OBRIGATÓRIAS:
+1. O campo "sinteseExecutiva" DEVE conter um texto explicativo em português claro.
+2. O campo "resumoMarkdown" DEVE ser um texto Markdown COMPLETO, rico em detalhes técnicos, com as 3 seções especificadas acima. NÃO retorne um texto genérico ou uma frase simples no resumoMarkdown.
 
 Dados da Conta:
 ${JSON.stringify(contextData, null, 2)}
