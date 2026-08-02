@@ -54,17 +54,21 @@ export function OpenPositionCard({
     return () => clearInterval(interval);
   }, [openedAt]);
 
-  const entrySpot = s.lastSpotPrice || openTrade?.spotPrice || 0;
-  const entryPerp = s.lastPerpPrice || openTrade?.perpPrice || 0;
+  const entrySpot = openTrade?.spotPrice || s.lastSpotPrice || 0;
+  const entryPerp = openTrade?.perpPrice || s.lastPerpPrice || 0;
 
-  const currentSpot = s.lastSpotPrice || entrySpot;
-  const currentPerp = s.lastPerpPrice || entryPerp;
+  // Preço REAL de Execução a Mercado se fosse fechar AGORA:
+  // - Vende SPOT no BID (preço de comprador no livro Spot)
+  // - Compra PERP no ASK (preço de vendedor no livro Futuros)
+  const exitSpotPrice = s.lastSpotBid || s.lastSpotPrice || entrySpot;
+  const exitPerpPrice = s.lastPerpAsk || s.lastPerpPrice || entryPerp;
 
   const spotUnits = entrySpot > 0 ? positionSize / entrySpot : 0;
   const perpUnits = entryPerp > 0 ? positionSize / entryPerp : 0;
 
-  const spotPnL = spotUnits > 0 ? (currentSpot - entrySpot) * spotUnits : 0;
-  const perpPnL = perpUnits > 0 ? (entryPerp - currentPerp) * perpUnits : 0;
+  // PnL REAL de saída instantânea a mercado
+  const spotPnL = spotUnits > 0 && exitSpotPrice > 0 ? (exitSpotPrice - entrySpot) * spotUnits : 0;
+  const perpPnL = perpUnits > 0 && exitPerpPrice > 0 ? (entryPerp - exitPerpPrice) * perpUnits : 0;
   const marketPnL = spotPnL + perpPnL;
 
   const accumulatedFundingTrades = stratTrades.filter((t) => t.type === 'funding_fee_accumulated');
@@ -89,7 +93,9 @@ export function OpenPositionCard({
     : (latestFundingTrade?.fundingPct ?? openTrade?.fundingPct ?? null);
   const fundingAtOpenVal = s.fundingAtOpen !== undefined && s.fundingAtOpen !== null ? s.fundingAtOpen : openTrade?.fundingPct;
 
-  const currentSpread = currentSpot > 0 ? ((currentPerp - currentSpot) / currentSpot) * 100 : 0;
+  // Spread REAL de Saída a Mercado: (Bid Spot vs Ask Perp)
+  const currentSpread = exitPerpPrice > 0 ? ((exitSpotPrice - exitPerpPrice) / exitPerpPrice) * 100 : 0;
+  const spreadUsd = positionSize * (currentSpread / 100);
   const currentApr = (currentFundingVal !== null ? Number(currentFundingVal) : 0) * 3 * 365;
   const estLiqPrice = entryPerp > 0 ? entryPerp * 1.95 : null;
 
@@ -157,20 +163,20 @@ export function OpenPositionCard({
             ) : null}
           </div>
 
-          {/* 2. Valor Atual de Encerramento */}
-          <div className={`rounded-xl border p-3.5 flex flex-col justify-between ${totalUnrealizedPnL >= 0 ? 'border-emerald-500/40 bg-emerald-950/25' : 'border-red-500/40 bg-red-950/25'}`}>
+          {/* 2. Valor Atual de Encerramento (Retorno Líquido no Bolso) */}
+          <div className={`rounded-xl border p-3.5 flex flex-col justify-between ${netProfitPostFees >= 0 ? 'border-emerald-500/40 bg-emerald-950/25' : 'border-red-500/40 bg-red-950/25'}`}>
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-              🏁 Valor Atual
+              🏁 Retorno Líquido Estimado
             </span>
             <div className="mt-1 text-xl sm:text-2xl font-black text-white">
-              ${estimatedExitValue.toFixed(2)} <span className="text-xs font-normal text-slate-400">USDT</span>
+              ${(positionSize + netProfitPostFees).toFixed(2)} <span className="text-xs font-normal text-slate-400">USDT</span>
             </div>
             <div className="mt-1 flex flex-col">
-              <span className={`text-xs font-extrabold ${totalUnrealizedPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {totalUnrealizedPnL >= 0 ? '+' : ''}${totalUnrealizedPnL.toFixed(4)} ({totalUnrealizedPnL >= 0 ? '+' : ''}{unrealizedPct.toFixed(2)}%)
+              <span className={`text-xs font-extrabold ${netProfitPostFees >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {netProfitPostFees >= 0 ? '+' : ''}${netProfitPostFees.toFixed(4)} ({netProfitPostFees >= 0 ? '+' : ''}{positionSize > 0 ? ((netProfitPostFees / positionSize) * 100).toFixed(2) : 0}%)
               </span>
               <span className="text-[10px] text-slate-400">
-                Lucro Líquido pós taxas: <strong className={netProfitPostFees >= 0 ? 'text-emerald-300 font-bold' : 'text-red-300 font-bold'}>{fmtUSDT(netProfitPostFees)} USDT</strong>
+                Já descontado: spread (Bid/Ask) + taxas de ordem
               </span>
             </div>
           </div>
@@ -196,26 +202,26 @@ export function OpenPositionCard({
             <span className="text-[10px] text-gray-400 font-normal">Hedge 1X (Delta Neutro)</span>
           </div>
 
-          {/* Perna 1: Spot LONG */}
+          {/* Perna 1: Spot LONG (Vende no Bid) */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-gray-300">
               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 Spot (LONG)
               </span>
-              {entrySpot && <span className="text-slate-400 font-mono text-[11px]">${fmtP(entrySpot)} → ${fmtP(currentSpot)}</span>}
+              {entrySpot > 0 && <span className="text-slate-400 font-mono text-[11px]">${fmtP(entrySpot)} → ${fmtP(exitSpotPrice)} (Bid)</span>}
             </div>
             <div className={`font-mono font-bold ${spotPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {fmtUSDT(spotPnL)} USDT
             </div>
           </div>
 
-          {/* Perna 2: Perp SHORT */}
+          {/* Perna 2: Perp SHORT (Compra no Ask) */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-gray-300">
               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                 Perpétuo (SHORT)
               </span>
-              {entryPerp && <span className="text-slate-400 font-mono text-[11px]">${fmtP(entryPerp)} → ${fmtP(currentPerp)}</span>}
+              {entryPerp > 0 && <span className="text-slate-400 font-mono text-[11px]">${fmtP(entryPerp)} → ${fmtP(exitPerpPrice)} (Ask)</span>}
             </div>
             <div className={`font-mono font-bold ${perpPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {fmtUSDT(perpPnL)} USDT
@@ -269,9 +275,9 @@ export function OpenPositionCard({
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             <div>
-              <span className="text-slate-400">Spread Spot/Perp: </span>
+              <span className="text-slate-400">Spread Real de Saída: </span>
               <span className={`font-mono font-semibold ${currentSpread >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {currentSpread >= 0 ? '+' : ''}{currentSpread.toFixed(3)}%
+                {currentSpread >= 0 ? '+' : ''}{currentSpread.toFixed(3)}% ({currentSpread >= 0 ? '+' : ''}${spreadUsd.toFixed(4)} USDT)
               </span>
             </div>
             <div className="text-right">

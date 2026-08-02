@@ -32,17 +32,20 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     if (hasAnyBalance && !forceRefresh) {
       let spotUsdtTotal = 0;
       let spotUsdcTotal = 0;
+      let spotTotalEquitySum = 0;
       let futuresUsdtTotal = 0;
       let futuresUsdcTotal = 0;
 
       const exchanges = keys.map((k: any) => {
         const spotUsdt = Number(k.spotUsdt || 0);
         const spotUsdc = Number(k.spotUsdc || 0);
+        const spotTotalEquity = Number(k.spotTotalEquity || (spotUsdt + spotUsdc));
         const futuresUsdt = Number(k.futuresUsdt || 0);
         const futuresUsdc = Number(k.futuresUsdc || 0);
 
         spotUsdtTotal += spotUsdt;
         spotUsdcTotal += spotUsdc;
+        spotTotalEquitySum += spotTotalEquity;
         futuresUsdtTotal += futuresUsdt;
         futuresUsdcTotal += futuresUsdc;
 
@@ -52,6 +55,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           exchangeId: k.exchangeId,
           spotUsdt,
           spotUsdc,
+          spotTotalEquity,
           futuresUsdt,
           futuresUsdc,
           updatedAt: k.balancesUpdatedAt,
@@ -62,6 +66,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         success: true,
         spotUsdt: spotUsdtTotal,
         spotUsdc: spotUsdcTotal,
+        spotTotalEquity: spotTotalEquitySum,
         futuresUsdt: futuresUsdtTotal,
         futuresUsdc: futuresUsdcTotal,
         exchanges,
@@ -104,23 +109,24 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           secret: apiSecret,
           enableRateLimit: true,
           timeout: 10000,
-          options: { defaultType: 'spot' },
+          options: { defaultType: 'spot', recvWindow: 60000, adjustTimeDifference: true },
         });
 
         const spotBal = await spotEx.fetchBalance();
 
-        spotUsdt = Number(spotBal.free?.USDT ?? spotBal.USDT?.free ?? spotBal.total?.USDT ?? spotBal.USDT?.total ?? 0);
-        spotUsdc = Number(spotBal.free?.USDC ?? spotBal.USDC?.free ?? spotBal.total?.USDC ?? spotBal.USDC?.total ?? 0);
+        spotUsdt = Number(spotBal.free?.USDT ?? spotBal.USDT?.free ?? 0);
+        spotUsdc = Number(spotBal.free?.USDC ?? spotBal.USDC?.free ?? 0);
 
         if (spotUsdt === 0 && spotBal.info) {
           const balancesArr = Array.isArray(spotBal.info.balances) ? spotBal.info.balances : (Array.isArray(spotBal.info?.data) ? spotBal.info.data : []);
           const itemT = balancesArr.find((b: any) => b.asset === 'USDT' || b.currency === 'USDT');
-          if (itemT) spotUsdt = Number(itemT.free || itemT.availableBalance || itemT.equity || 0);
+          if (itemT) spotUsdt = Number(itemT.free || itemT.availableBalance || 0);
           const itemC = balancesArr.find((b: any) => b.asset === 'USDC' || b.currency === 'USDC');
-          if (itemC) spotUsdc = Number(itemC.free || itemC.availableBalance || itemC.equity || 0);
+          if (itemC) spotUsdc = Number(itemC.free || itemC.availableBalance || 0);
         }
 
-        // ── Converter o saldo de todas as altcoins em Spot para USDT ─────────────
+        // ── Calcula Patrimônio Total Spot (USDT + USDC + todas Altcoins convertidas) ─────────────
+        let spotTotalEquity = spotUsdt + spotUsdc;
         const totals = spotBal.total || {};
         const nonStableCodes = Object.keys(totals).filter(code => {
           const amt = Number(totals[code] || 0);
@@ -136,7 +142,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
               const symbol = `${code}/USDT`;
               const price = Number(tickers[symbol]?.last || tickers[symbol]?.close || tickers[symbol]?.bid || 0);
               if (price > 0) {
-                spotUsdt += amt * price;
+                spotTotalEquity += amt * price;
               }
             }
           } catch {
@@ -146,13 +152,15 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
                 const ticker = await spotEx.fetchTicker(`${code}/USDT`);
                 const price = Number(ticker?.last || ticker?.close || 0);
                 if (price > 0) {
-                  spotUsdt += amt * price;
+                  spotTotalEquity += amt * price;
                 }
               } catch {}
             }
           }
         }
-        console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) Spot Total em USDT: ${spotUsdt}`);
+
+        (key as any).spotTotalEquity = spotTotalEquity;
+        console.log(`🔍 [BALANCES DEBUG] ${key.name} (${exId}) Spot Livre USDT: ${spotUsdt} | Spot Total Patrimônio: ${spotTotalEquity}`);
       } catch (spotErr: any) {
         console.error(`❌ Erro ao buscar saldo Spot [${key.name} - ${exId}]:`, spotErr?.message);
       }
@@ -164,7 +172,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           secret: apiSecret,
           enableRateLimit: true,
           timeout: 10000,
-          options: { defaultType: ccxtId === 'mexc' ? 'swap' : 'future' },
+          options: { defaultType: ccxtId === 'mexc' ? 'swap' : 'future', recvWindow: 60000, adjustTimeDifference: true },
         });
 
         const futBal = await futEx.fetchBalance();
@@ -225,8 +233,9 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       }
 
       try {
+        const spotTotalEquity = (key as any).spotTotalEquity || (spotUsdt + spotUsdc);
         await ExchangeKey.findByIdAndUpdate(key._id, {
-          $set: { spotUsdt, spotUsdc, futuresUsdt, futuresUsdc, balancesUpdatedAt: new Date() }
+          $set: { spotUsdt, spotUsdc, spotTotalEquity, futuresUsdt, futuresUsdc, balancesUpdatedAt: new Date() }
         });
       } catch {}
 
@@ -236,6 +245,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         exchangeId: key.exchangeId,
         spotUsdt,
         spotUsdc,
+        spotTotalEquity: (key as any).spotTotalEquity || (spotUsdt + spotUsdc),
         futuresUsdt,
         futuresUsdc,
       };
@@ -245,12 +255,14 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
     let spotUsdtTotal = 0;
     let spotUsdcTotal = 0;
+    let spotTotalEquitySum = 0;
     let futuresUsdtTotal = 0;
     let futuresUsdcTotal = 0;
 
     for (const d of validDetails) {
       spotUsdtTotal += d.spotUsdt || 0;
       spotUsdcTotal += d.spotUsdc || 0;
+      spotTotalEquitySum += d.spotTotalEquity || (d.spotUsdt + d.spotUsdc) || 0;
       futuresUsdtTotal += d.futuresUsdt || 0;
       futuresUsdcTotal += d.futuresUsdc || 0;
     }
@@ -259,6 +271,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       success: true,
       spotUsdt: spotUsdtTotal,
       spotUsdc: spotUsdcTotal,
+      spotTotalEquity: spotTotalEquitySum,
       futuresUsdt: futuresUsdtTotal,
       futuresUsdc: futuresUsdcTotal,
       exchanges: validDetails,

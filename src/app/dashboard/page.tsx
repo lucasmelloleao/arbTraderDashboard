@@ -18,6 +18,8 @@ export default function DashboardOverview() {
   const [totalCexUsd, setTotalCexUsd] = useState<number | null>(null);
   const [totalSpotUsd, setTotalSpotUsd] = useState<number>(0);
   const [totalFuturesUsd, setTotalFuturesUsd] = useState<number>(0);
+  const [spotUsdtOnly, setSpotUsdtOnly] = useState<number>(0);
+  const [futuresUsdtOnly, setFuturesUsdtOnly] = useState<number>(0);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
@@ -30,14 +32,22 @@ export default function DashboardOverview() {
       const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
 
       try {
-        // 1. Busca saldos instantâneos das CEX
-        const balancesRes = await fetch('/api/perp-arb/balances', authHeaders);
+        // 1. Busca saldos atualizados das CEX
+        const balancesRes = await fetch('/api/perp-arb/balances?refresh=true', authHeaders);
         if (balancesRes.ok) {
           const balData = await balancesRes.json();
           if (balData.success && balData.exchanges) {
             setCexBalances(balData.exchanges);
-            const spotTot = Number(balData.spotUsdt || 0) + Number(balData.spotUsdc || 0);
-            const futTot = Number(balData.futuresUsdt || 0) + Number(balData.futuresUsdc || 0);
+            const spotUsdtVal = Number(balData.spotUsdt || 0);
+            const spotUsdcVal = Number(balData.spotUsdc || 0);
+            const futUsdtVal = Number(balData.futuresUsdt || 0);
+            const futUsdcVal = Number(balData.futuresUsdc || 0);
+
+            const spotTot = Number(balData.spotTotalEquity || (spotUsdtVal + spotUsdcVal));
+            const futTot = futUsdtVal + futUsdcVal;
+
+            setSpotUsdtOnly(spotUsdtVal);
+            setFuturesUsdtOnly(futUsdtVal);
             setTotalSpotUsd(spotTot);
             setTotalFuturesUsd(futTot);
             setTotalCexUsd(spotTot + futTot);
@@ -114,26 +124,41 @@ export default function DashboardOverview() {
 
       {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm">
-          <p className="text-sm font-medium text-slate-400 mb-1">Corretoras Conectadas</p>
-          <p className="text-3xl font-bold text-white">
-            {loading ? '...' : cexBalances.length}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm flex flex-col justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-400 mb-1">Corretoras Conectadas</p>
+            <p className="text-3xl font-bold text-white">
+              {loading ? '...' : cexBalances.length}
+            </p>
+          </div>
+          <p className="text-xs text-slate-400 font-mono mt-2 pt-2 border-t border-slate-800/80">
+            Patrimônio Global: <strong className="text-white font-bold">{loading ? '...' : `$${(totalCexUsd || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
           </p>
         </div>
 
-        <div className="bg-slate-900 border border-emerald-500/20 p-6 rounded-xl shadow-sm relative overflow-hidden">
+        <div className="bg-slate-900 border border-emerald-500/20 p-6 rounded-xl shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent"></div>
-          <p className="text-sm font-medium text-emerald-400 mb-1">🟢 Saldo Total Spot (CEX)</p>
-          <p className="text-3xl font-bold text-emerald-300">
-            {loading ? '...' : `$${totalSpotUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          <div>
+            <p className="text-sm font-medium text-emerald-400 mb-1">🟢 Saldo Total Spot (CEX)</p>
+            <p className="text-3xl font-bold text-emerald-300">
+              {loading ? '...' : `$${totalSpotUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </p>
+          </div>
+          <p className="text-xs text-emerald-400/80 font-mono mt-2 pt-2 border-t border-emerald-500/10 relative z-10">
+            Disponível em USDT: <strong className="text-emerald-300 font-bold">{loading ? '...' : `$${spotUsdtOnly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
           </p>
         </div>
 
-        <div className="bg-slate-900 border border-indigo-500/20 p-6 rounded-xl shadow-sm relative overflow-hidden">
+        <div className="bg-slate-900 border border-indigo-500/20 p-6 rounded-xl shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent"></div>
-          <p className="text-sm font-medium text-indigo-400 mb-1">🟣 Saldo Total Futuros (CEX)</p>
-          <p className="text-3xl font-bold text-indigo-300">
-            {loading ? '...' : `$${totalFuturesUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          <div>
+            <p className="text-sm font-medium text-indigo-400 mb-1">🟣 Saldo Total Futuros (CEX)</p>
+            <p className="text-3xl font-bold text-indigo-300">
+              {loading ? '...' : `$${totalFuturesUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </p>
+          </div>
+          <p className="text-xs text-indigo-400/80 font-mono mt-2 pt-2 border-t border-indigo-500/10 relative z-10">
+            Disponível em USDT: <strong className="text-indigo-300 font-bold">{loading ? '...' : `$${futuresUsdtOnly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
           </p>
         </div>
       </div>
