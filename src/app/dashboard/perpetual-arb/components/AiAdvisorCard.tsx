@@ -206,12 +206,14 @@ export function AiAdvisorCard() {
         </div>
       )}
 
-      {/* Relatório Completo Estruturado Expandível */}
-      {expanded && data?.resumoMarkdown && (
-        <div className="mt-4 pt-3 border-t border-cyan-500/20 text-xs sm:text-sm text-slate-200 leading-relaxed font-sans space-y-3">
-          <div className="bg-slate-950/90 p-4 rounded-xl border border-slate-800 text-slate-300 leading-relaxed">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Relatório Técnico Detalhado</h4>
-            <div className="prose prose-invert max-w-none text-xs sm:text-sm whitespace-pre-wrap font-sans">
+      {/* Relatório Técnico Detalhado Visível por Padrão */}
+      {data?.resumoMarkdown && (
+        <div className="mt-4 pt-4 border-t border-cyan-500/20 space-y-3">
+          <div className="bg-slate-950/90 p-4 rounded-xl border border-slate-800 text-slate-300 leading-relaxed shadow-inner">
+            <h4 className="text-xs font-black uppercase tracking-widest text-cyan-400 mb-3 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-cyan-300" /> Relatório &amp; Diagnóstico Técnico Detalhado
+            </h4>
+            <div className="text-xs sm:text-sm text-slate-200 font-sans leading-relaxed whitespace-pre-wrap">
               {data.resumoMarkdown}
             </div>
           </div>
