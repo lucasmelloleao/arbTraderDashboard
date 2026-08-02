@@ -9,8 +9,10 @@ const ExchangeKeySchema = new mongoose.Schema({
   active: { type: Boolean, default: true },
   spotUsdt: { type: Number, default: 0 },
   spotUsdc: { type: Number, default: 0 },
+  spotTotalEquity: { type: Number, default: 0 },
   futuresUsdt: { type: Number, default: 0 },
   futuresUsdc: { type: Number, default: 0 },
+  futuresTotalEquity: { type: Number, default: 0 },
   balancesUpdatedAt: { type: Date },
   createdAt: { type: Date, default: Date.now }
 });
