@@ -338,9 +338,9 @@ export default function FlashLoanPage() {
                 <span className="w-2 h-2 rounded-full bg-rose-400"></span> Offline
               </span>
             )}
-          </div>
+                    </div>
           
-                    <div className="h-6 w-px bg-slate-800"></div>
+          <div className="h-6 w-px bg-slate-800"></div>
 
           {/* Redes Habilitadas */}
           <div className="flex items-center gap-3">
