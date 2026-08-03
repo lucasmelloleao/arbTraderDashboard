@@ -84,8 +84,7 @@ export default function FlashLoanPage() {
   const [mevProtection, setMevProtection] = useState(true);
     const [botOnline, setBotOnline] = useState<boolean>(false);
   const [enabledNetworks, setEnabledNetworks] = useState<string[]>(['solana', 'arbitrum', 'polygon']);
-  const networksDirtyRef = useRef(false);
-  const [loadingStatus, setLoadingStatus] = useState(false);
+    const networksDirtyRef = useRef(false);
 
   const [wallets, setWallets] = useState<any[]>([]);
   const [selectedWalletId, setSelectedWalletId] = useState('');
@@ -341,69 +340,7 @@ export default function FlashLoanPage() {
             )}
           </div>
           
-          <div className="h-6 w-px bg-slate-800"></div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-400">Mode:</span>
-            <button
-              onClick={toggleBotMode}
-              disabled={loadingStatus}
-              className={clsx(
-                "relative inline-flex h-8 items-center rounded-full w-32 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900",
-                botMode === 'live' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-emerald-500 hover:bg-emerald-600',
-                loadingStatus && "opacity-50 cursor-not-allowed"
-              )}
-            >
-              <span className="sr-only">Toggle Bot Mode</span>
-              <span
-                className={clsx(
-                  "inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out flex items-center justify-center",
-                  botMode === 'live' ? 'translate-x-[6.5rem]' : 'translate-x-1'
-                )}
-              >
-                {botMode === 'live' ? <Pause className="w-3 h-3 text-rose-500" /> : <Play className="w-3 h-3 text-emerald-500" />}
-              </span>
-              <span className={clsx(
-                "absolute text-xs font-bold text-white transition-opacity",
-                botMode === 'live' ? 'left-3' : 'left-9'
-              )}>
-                {botMode === 'live' ? 'LIVE (DANGER)' : 'SIMULATED'}
-              </span>
-            </button>
-          </div>
-
-          <div className="h-6 w-px bg-slate-800"></div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-400">Conn:</span>
-            <button
-              onClick={toggleConnectionMode}
-              disabled={loadingStatus}
-              className={clsx(
-                "relative inline-flex h-8 items-center rounded-full w-24 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900",
-                connectionMode === 'wss' ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-600 hover:bg-slate-700',
-                loadingStatus && "opacity-50 cursor-not-allowed"
-              )}
-            >
-              <span className="sr-only">Toggle Connection Mode</span>
-              <span
-                className={clsx(
-                  "inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out flex items-center justify-center",
-                  connectionMode === 'wss' ? 'translate-x-[4.5rem]' : 'translate-x-1'
-                )}
-              >
-                <Activity className={clsx("w-3 h-3", connectionMode === 'wss' ? "text-indigo-500" : "text-slate-600")} />
-              </span>
-              <span className={clsx(
-                "absolute text-xs font-bold text-white transition-opacity",
-                connectionMode === 'wss' ? 'left-3' : 'left-7'
-              )}>
-                {connectionMode === 'wss' ? 'WSS' : 'RPC'}
-              </span>
-            </button>
-          </div>
-
-          <div className="h-6 w-px bg-slate-800"></div>
+                    <div className="h-6 w-px bg-slate-800"></div>
 
           {/* Redes Habilitadas */}
           <div className="flex items-center gap-3">
@@ -1483,4 +1420,3 @@ export default function FlashLoanPage() {
     </div>
   );
 }
-
