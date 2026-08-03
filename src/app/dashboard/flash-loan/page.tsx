@@ -217,52 +217,6 @@ export default function FlashLoanPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const toggleBotMode = async () => {
-    setLoadingStatus(true);
-    const newMode = botMode === 'simulated' ? 'live' : 'simulated';
-    try {
-      const res = await fetch('/api/system/status', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ botMode: newMode })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setBotMode(data.botMode);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingStatus(false);
-    }
-  };
-
-  const toggleConnectionMode = async () => {
-    setLoadingStatus(true);
-    const newMode = connectionMode === 'rpc' ? 'wss' : 'rpc';
-    try {
-      const res = await fetch('/api/system/status', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ connectionMode: newMode })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setConnectionMode(data.connectionMode);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingStatus(false);
-    }
-  };
-
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWalletId) {
