@@ -25,7 +25,8 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       botOnline, 
       lastHeartbeat: status?.botLastHeartbeat,
       botMode: status?.botMode || 'simulated',
-      connectionMode: status?.connectionMode || 'rpc'
+      connectionMode: status?.connectionMode || 'rpc',
+      enabledNetworks: status?.enabledNetworks || ['solana', 'arbitrum', 'polygon']
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -35,7 +36,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 export const PUT = withAuth(async (req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
-    const { botMode, connectionMode } = await req.json();
+    const { botMode, connectionMode, enabledNetworks } = await req.json();
 
     const updateData: any = {};
     if (botMode !== undefined) {
@@ -52,6 +53,13 @@ export const PUT = withAuth(async (req: NextRequest, userId: string) => {
       updateData.connectionMode = connectionMode;
     }
 
+    if (enabledNetworks !== undefined) {
+      if (!Array.isArray(enabledNetworks) || enabledNetworks.some((n: string) => !['solana', 'arbitrum', 'polygon'].includes(n))) {
+        return NextResponse.json({ error: 'Invalid enabledNetworks' }, { status: 400 });
+      }
+      updateData.enabledNetworks = enabledNetworks;
+    }
+
     const status = await SystemStatus.findOneAndUpdate(
       { botId: 'flash-sniper' },
       updateData,
@@ -60,7 +68,8 @@ export const PUT = withAuth(async (req: NextRequest, userId: string) => {
     
     return NextResponse.json({ 
       botMode: status.botMode,
-      connectionMode: status.connectionMode 
+      connectionMode: status.connectionMode,
+      enabledNetworks: status.enabledNetworks
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

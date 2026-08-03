@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Zap, Settings, Play, Pause, AlertTriangle, Pencil, Activity, Clock, TrendingUp, TrendingDown, ExternalLink, ScanSearch, CheckCircle2, XCircle, Loader2, RefreshCw, TriangleAlert } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -82,9 +82,9 @@ export default function FlashLoanPage() {
   const [provider, setProvider] = useState('jupiter');
   const [lendingProvider, setLendingProvider] = useState('solend');
   const [mevProtection, setMevProtection] = useState(true);
-  const [botOnline, setBotOnline] = useState<boolean>(false);
-  const [botMode, setBotMode] = useState<'simulated' | 'live'>('simulated');
-  const [connectionMode, setConnectionMode] = useState<'rpc' | 'wss'>('rpc');
+    const [botOnline, setBotOnline] = useState<boolean>(false);
+  const [enabledNetworks, setEnabledNetworks] = useState<string[]>(['solana', 'arbitrum', 'polygon']);
+  const networksDirtyRef = useRef(false);
   const [loadingStatus, setLoadingStatus] = useState(false);
 
   const [wallets, setWallets] = useState<any[]>([]);
@@ -98,6 +98,30 @@ export default function FlashLoanPage() {
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotAmount, setSnapshotAmount] = useState('100');
   const [snapshotForceExecute, setSnapshotForceExecute] = useState(false);
+
+  // --- AI Strategist ---
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResults, setAiResults] = useState<any[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const runAiStrategist = async () => {
+    setAiLoading(true);
+    setAiResults([]);
+    setAiError(null);
+    try {
+      const res = await fetch('/api/monitor/ai');
+      const data = await res.json();
+      if (!res.ok) {
+        setAiError(data.error || 'Erro na IA');
+      } else {
+        setAiResults(data.tokens || []);
+      }
+    } catch (e: any) {
+      setAiError(e.message || 'Falha ao conectar com a IA');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const fetchStrategies = async () => {
     const res = await fetch('/api/strategies', {
@@ -135,12 +159,48 @@ export default function FlashLoanPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setBotOnline(data.botOnline);
-        if (data.botMode) setBotMode(data.botMode);
-        if (data.connectionMode) setConnectionMode(data.connectionMode);
+                setBotOnline(data.botOnline);
+        // Só atualiza as redes se não houver alteração local pendente
+        if (data.enabledNetworks && !networksDirtyRef.current) setEnabledNetworks(data.enabledNetworks);
       }
     } catch (e) {
       setBotOnline(false);
+    }
+  };
+
+  const toggleNetwork = async (network: string) => {
+    const current = enabledNetworks.includes(network);
+    const newNetworks = current
+      ? enabledNetworks.filter(n => n !== network)
+      : [...enabledNetworks, network];
+    
+        // Marca como pendente para o polling não sobrescrever
+    networksDirtyRef.current = true;
+    setEnabledNetworks(newNetworks);
+    
+    try {
+      const res = await fetch('/api/system/status', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ enabledNetworks: newNetworks })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Sincroniza com o valor retornado pelo servidor
+        if (data.enabledNetworks) setEnabledNetworks(data.enabledNetworks);
+      } else {
+        const data = await res.json();
+        alert(`Erro: ${data.error || 'Falha ao atualizar redes'}`);
+        setEnabledNetworks(enabledNetworks);
+      }
+    } catch (err) {
+      console.error(err);
+      setEnabledNetworks(enabledNetworks);
+    } finally {
+      networksDirtyRef.current = false;
     }
   };
 
@@ -387,6 +447,41 @@ export default function FlashLoanPage() {
                 {connectionMode === 'wss' ? 'WSS' : 'RPC'}
               </span>
             </button>
+          </div>
+
+          <div className="h-6 w-px bg-slate-800"></div>
+
+          {/* Redes Habilitadas */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-slate-400">Redes:</span>
+            <div className="flex items-center gap-2">
+              {[
+                { id: 'solana', label: 'SOLANA', color: 'text-emerald-400', border: 'border-emerald-500/30', bg: 'bg-emerald-500/10' },
+                { id: 'arbitrum', label: 'ARBITRUM', color: 'text-sky-400', border: 'border-sky-500/30', bg: 'bg-sky-500/10' },
+                { id: 'polygon', label: 'POLYGON', color: 'text-violet-400', border: 'border-violet-500/30', bg: 'bg-violet-500/10' }
+              ].map(net => {
+                const isEnabled = enabledNetworks.includes(net.id);
+                return (
+                  <button
+                    key={net.id}
+                    onClick={() => toggleNetwork(net.id)}
+                    className={clsx(
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border",
+                      isEnabled
+                        ? `${net.color} ${net.bg} ${net.border}`
+                        : "text-slate-600 bg-slate-800/50 border-slate-700/50 hover:border-slate-600"
+                    )}
+                    title={isEnabled ? `Desativar ${net.label}` : `Ativar ${net.label}`}
+                  >
+                    <span className={clsx(
+                      "w-2 h-2 rounded-full transition-colors",
+                      isEnabled ? "bg-current" : "bg-slate-700"
+                    )} />
+                    {net.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -1213,6 +1308,101 @@ export default function FlashLoanPage() {
       </div>
       {/* ===== FIM DO PAINEL SNAPSHOT ===== */}
 
+      {/* ===== IA ESTRATEGISTA PANEL ===== */}
+      <div className="mt-8 overflow-hidden rounded-2xl" style={{background: 'linear-gradient(135deg, #0a0f1e 0%, #1a1025 40%, #0f0c1a 100%)', border: '1px solid rgba(236,72,153,0.2)', boxShadow: '0 0 60px -10px rgba(236,72,153,0.15)'}}>
+        <div style={{height: '2px', background: 'linear-gradient(90deg, transparent, #ec4899, #f472b6, #ec4899, transparent)'}} />
+        <div className="p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 mb-8">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background: 'linear-gradient(135deg, #db2777, #be185d)', boxShadow: '0 4px 15px rgba(219,39,119,0.4)'}}>
+                  <Zap className="w-4 h-4 text-white" />
+                </div>
+                <h4 className="text-xl font-bold text-white tracking-tight">IA Estrategista</h4>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: 'rgba(236,72,153,0.15)', color: '#f472b6', border: '1px solid rgba(236,72,153,0.3)'}}>MERCADO AO VIVO</span>
+              </div>
+              <p className="text-sm text-slate-400 ml-12">A inteligência artificial analisa o DexScreener buscando as melhores oportunidades de Flash Loan na Solana.</p>
+            </div>
+            
+            <button
+              onClick={runAiStrategist}
+              disabled={aiLoading}
+              className="relative flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group ml-12 sm:ml-0"
+              style={{background: 'linear-gradient(135deg, #db2777, #be185d)', boxShadow: '0 4px 20px rgba(219,39,119,0.35)'}}
+            >
+              <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{background: 'linear-gradient(135deg, #be185d, #9d174d)'}} />
+              <span className="relative flex items-center gap-2">
+                {aiLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Analisando Mercado...</> : <><ScanSearch className="w-4 h-4" /> Buscar Oportunidades com IA</>}
+              </span>
+            </button>
+          </div>
+
+          {/* Estado inicial */}
+          {!aiLoading && aiResults.length === 0 && !aiError && (
+            <div className="py-12 flex flex-col items-center gap-4">
+              <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{background: 'radial-gradient(circle, rgba(236,72,153,0.15) 0%, transparent 70%)', border: '1px dashed rgba(236,72,153,0.3)'}}>
+                <Zap className="w-8 h-8 text-pink-500/60" />
+              </div>
+              <p className="text-slate-400 text-sm">Clique em &quot;Buscar Oportunidades com IA&quot; para gerar estratégias.</p>
+            </div>
+          )}
+
+          {/* Erro */}
+          {aiError && !aiLoading && (
+            <div className="rounded-xl p-5 mb-6 flex items-start gap-4" style={{background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)'}}>
+              <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <h5 className="text-red-400 font-bold mb-1">Erro ao contactar a IA</h5>
+                <p className="text-red-200/70 text-sm break-words">{aiError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Resultados */}
+          {aiResults.length > 0 && !aiLoading && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {aiResults.map((token: any, idx: number) => (
+                <div key={idx} className="bg-slate-900/80 border border-pink-500/30 rounded-xl p-5 relative group transition-all hover:-translate-y-1 hover:shadow-[0_8px_30px_-10px_rgba(236,72,153,0.25)]">
+                  <div className="absolute top-0 right-0 p-3">
+                    <span className="text-[10px] font-black uppercase text-pink-400 bg-pink-500/10 px-2 py-1 rounded-full border border-pink-500/20">
+                      Top #{idx + 1}
+                    </span>
+                  </div>
+                  <h5 className="text-2xl font-black text-white mb-1 tracking-tight">{token.symbol}</h5>
+                  <p className="text-[10px] text-slate-500 font-mono mb-4 bg-slate-950 px-2 py-1 rounded-md border border-slate-800 break-all">{token.address}</p>
+                  
+                  <div className="bg-pink-950/20 rounded-lg p-3 mb-5 border border-pink-500/10 h-20">
+                    <p className="text-xs text-pink-300/80 font-medium line-clamp-3">
+                      &quot;{token.reason}&quot;
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      setNetwork('solana');
+                      setProvider('jupiter');
+                      setLendingProvider('kamino');
+                      setTokenBMint(token.address);
+                      setTokenAMint(KNOWN_TOKENS.find(t => t.symbol === 'USDC')?.mint || '');
+                      setName(`AI-SOL-${token.symbol}-Flash`);
+                      setBorrowAmount('1000');
+                      setMinProfitUsdc('0.10');
+                      setMevProtection(true);
+                      setIsFormOpen(true);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="w-full bg-pink-500/10 hover:bg-pink-500 text-pink-400 hover:text-white border border-pink-500/30 font-bold text-sm px-4 py-2 rounded-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Implementar Estratégia
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {/* ===== FIM DA IA ESTRATEGISTA ===== */}
+
       {editingStrategy && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-lg w-full max-w-md my-8">
@@ -1335,7 +1525,8 @@ export default function FlashLoanPage() {
             </div>
           </div>
         </div>
-      )}
+            )}
     </div>
   );
 }
+
