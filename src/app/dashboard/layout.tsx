@@ -9,7 +9,7 @@ import clsx from 'clsx';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<{name: string, email: string} | null>(null);
+  const [user, setUser] = useState<{ name: string, email: string } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -50,7 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-slate-950 text-slate-200 flex overflow-hidden">
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
@@ -65,10 +65,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className={clsx("p-6 flex items-center md:block", isCollapsed ? "justify-center" : "justify-between")}>
           <h1 className={clsx("text-xl font-bold text-white flex items-center gap-2", isCollapsed && "justify-center")}>
             <Zap className="w-6 h-6 text-indigo-500 shrink-0" />
-            {!isCollapsed && <span>Solana Flash</span>}
+            {!isCollapsed && <span>ArbTrade</span>}
           </h1>
           {!isCollapsed && (
-            <button 
+            <button
               className="md:hidden text-slate-400 hover:text-white"
               onClick={() => setIsMobileMenuOpen(false)}
             >
@@ -81,9 +81,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const Icon = link.icon;
             const isActive = pathname === link.href;
             return (
-              <Link 
-                key={link.href} 
-                href={link.href} 
+              <Link
+                key={link.href}
+                href={link.href}
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={clsx(
                   "flex items-center rounded-lg text-sm font-medium transition-colors group",
@@ -117,7 +117,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           )}
 
-          <Link 
+          <Link
             href="/dashboard/profile"
             onClick={() => setIsMobileMenuOpen(false)}
             className={clsx(
@@ -129,7 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <User className="w-4 h-4 shrink-0" />
             {!isCollapsed && <span>Profile</span>}
           </Link>
-          <button 
+          <button
             onClick={() => { localStorage.removeItem('token'); router.push('/login'); }}
             className={clsx(
               "w-full flex items-center text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors",
@@ -146,7 +146,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="h-16 border-b border-slate-800 bg-slate-900/50 flex items-center px-4 md:px-8 gap-4 shrink-0">
-          <button 
+          <button
             className="text-slate-400 hover:text-white p-1.5 hover:bg-slate-800 rounded-md transition-colors"
             onClick={() => {
               if (window.innerWidth < 768) {

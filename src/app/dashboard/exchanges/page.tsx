@@ -29,6 +29,7 @@ export default function ExchangesPage() {
   const [apiSecret, setApiSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
   const fetchExchanges = async () => {
     try {
@@ -70,6 +71,7 @@ export default function ExchangesPage() {
         setApiKey('');
         setApiSecret('');
         setEditingId(null);
+        setIsFormOpen(false);
         fetchExchanges();
       } else {
         const err = await res.json();
@@ -88,6 +90,7 @@ export default function ExchangesPage() {
     setName(exchange.name);
     setApiKey(exchange.apiKey);
     setApiSecret(''); // Leave blank to keep existing secret
+    setIsFormOpen(true);
   };
 
   const handleCancelEdit = () => {
@@ -96,6 +99,7 @@ export default function ExchangesPage() {
     setName('');
     setApiKey('');
     setApiSecret('');
+    setIsFormOpen(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -119,6 +123,11 @@ export default function ExchangesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-2xl font-bold text-white">Corretoras Centralizadas (CEX)</h3>
+        {!isFormOpen && (
+          <button onClick={() => setIsFormOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2">
+            <Plus className="w-5 h-5" /> Nova CEX
+          </button>
+        )}
       </div>
 
       <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4 flex items-start gap-4 shadow-sm mb-8">
@@ -167,17 +176,16 @@ export default function ExchangesPage() {
         ))}
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm max-w-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <h4 className="text-lg font-medium text-white flex items-center gap-2">
-            <Plus className="w-5 h-5 text-indigo-500" /> {editingId ? 'Editar Conexão da Corretora' : 'Registrar Nova Chave de API'}
-          </h4>
-          {editingId && (
+      {isFormOpen && (
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm max-w-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <h4 className="text-lg font-medium text-white flex items-center gap-2">
+              <Plus className="w-5 h-5 text-indigo-500" /> {editingId ? 'Editar Conexão da Corretora' : 'Registrar Nova Chave de API'}
+            </h4>
             <button onClick={handleCancelEdit} className="text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
-              Cancelar Edição
+              {editingId ? 'Cancelar Edição' : 'Cancelar'}
             </button>
-          )}
-        </div>
+          </div>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -210,6 +218,7 @@ export default function ExchangesPage() {
           </button>
         </form>
       </div>
+      )}
     </div>
   );
 }
