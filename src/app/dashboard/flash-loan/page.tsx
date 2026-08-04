@@ -651,7 +651,7 @@ export default function FlashLoanPage() {
                     <td className="px-4 py-3 text-right">
                       {trade.txid ? (
                         <a 
-                          href={`https://solscan.io/tx/${trade.txid}`} 
+                          href={`${trade.network === "polygon" ? "https://polygonscan.com/tx/" : trade.network === "arbitrum" ? "https://arbiscan.io/tx/" : "https://solscan.io/tx/"}${trade.txid}`}
                           target="_blank" 
                           rel="noopener noreferrer" 
                           className="inline-flex items-center gap-1 text-slate-400 hover:text-indigo-400 transition-colors bg-slate-800/50 hover:bg-slate-800 px-2 py-1 rounded text-xs"

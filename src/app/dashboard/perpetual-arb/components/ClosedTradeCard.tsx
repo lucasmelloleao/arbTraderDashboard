@@ -38,7 +38,7 @@ export function ClosedTradeCard({ trade, allTrades = [] }: ClosedTradeCardProps)
   const matchingOpenTrade = allTrades.find((t) => {
     if (t.type !== 'open_hedge' || (t.status !== 'executed' && t.status !== 'simulated')) return false;
     const sId = typeof t.strategyId === 'object' && t.strategyId !== null ? String((t.strategyId as any)._id) : String(t.strategyId || '');
-    const matchStrat = closeStratId && sId && closeStratId === sId;
+    const matchStrat = closeStratId && closeStratId !== 'null' && sId && sId !== 'null' && closeStratId === sId;
     const matchSymbol = t.perpSymbol && trade.perpSymbol && t.perpSymbol === trade.perpSymbol;
     return (matchStrat || matchSymbol) && new Date(t.createdAt).getTime() <= new Date(trade.createdAt).getTime();
   });
@@ -47,9 +47,15 @@ export function ClosedTradeCard({ trade, allTrades = [] }: ClosedTradeCardProps)
   const matchingFundingTrades = allTrades.filter((t) => {
     if (t.type !== 'funding_fee_accumulated') return false;
     const sId = typeof t.strategyId === 'object' && t.strategyId !== null ? String((t.strategyId as any)._id) : String(t.strategyId || '');
-    const matchStrat = closeStratId && sId && closeStratId === sId;
+    const matchStrat = closeStratId && closeStratId !== 'null' && sId && sId !== 'null' && closeStratId === sId;
     const matchSymbol = t.perpSymbol && trade.perpSymbol && t.perpSymbol === trade.perpSymbol;
-    return matchStrat || matchSymbol;
+    
+    // E garante que foi coletado após o início da operação (matchingOpenTrade) e antes do fechamento
+    const openTime = matchingOpenTrade ? new Date(matchingOpenTrade.createdAt).getTime() : 0;
+    const closeTime = new Date(trade.createdAt).getTime();
+    const tTime = new Date(t.createdAt).getTime();
+    
+    return (matchStrat || matchSymbol) && tTime >= openTime && tTime <= closeTime;
   });
 
   const fundingCollectedVal = matchingFundingTrades.reduce((acc, t) => acc + Number(t.pnl || 0), 0);
@@ -65,8 +71,8 @@ export function ClosedTradeCard({ trade, allTrades = [] }: ClosedTradeCardProps)
   const spotUnits = openSpotPrice && openSpotPrice > 0 ? amount / openSpotPrice : 0;
   const perpUnits = openPerpPrice && openPerpPrice > 0 ? amount / openPerpPrice : 0;
 
-  const spotPnL = spotUnits > 0 && closeSpotPrice ? (closeSpotPrice - openSpotPrice) * spotUnits : null;
-  const perpPnL = perpUnits > 0 && closePerpPrice ? (openPerpPrice - closePerpPrice) * perpUnits : null;
+  const spotPnL = spotUnits > 0 && closeSpotPrice && openSpotPrice ? (closeSpotPrice - openSpotPrice) * spotUnits : null;
+  const perpPnL = perpUnits > 0 && closePerpPrice && openPerpPrice ? (openPerpPrice - closePerpPrice) * perpUnits : null;
 
   const spreadAtOpen = openSpotPrice && openPerpPrice && openSpotPrice > 0 ? ((openPerpPrice - openSpotPrice) / openSpotPrice) * 100 : null;
   const spreadAtClose = closeSpotPrice && closePerpPrice && closeSpotPrice > 0 ? ((closeSpotPrice - closePerpPrice) / closeSpotPrice) * 100 : null;

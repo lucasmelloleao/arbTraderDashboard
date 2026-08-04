@@ -41,7 +41,10 @@ export function OpenPositionCard({
     return String(sId) === String(s._id) || t.perpSymbol === s.perpSymbol;
   });
 
-  const openTrade = stratTrades.find((t) => t.type === 'open_hedge' && (t.status === 'executed' || t.status === 'simulated'));
+  const openHedgeTrades = stratTrades.filter((t) => t.type === 'open_hedge' && (t.status === 'executed' || t.status === 'simulated'));
+  const openTrade = openHedgeTrades.length > 0
+    ? openHedgeTrades.reduce((latest, current) => new Date(current.createdAt).getTime() > new Date(latest.createdAt).getTime() ? current : latest)
+    : undefined;
   const openedAt = s.positionOpenedAt || openTrade?.createdAt;
 
   const [elapsedStr, setElapsedStr] = useState(() => formatElapsed(openedAt));
@@ -71,14 +74,30 @@ export function OpenPositionCard({
   const perpPnL = perpUnits > 0 && exitPerpPrice > 0 ? (entryPerp - exitPerpPrice) * perpUnits : 0;
   const marketPnL = spotPnL + perpPnL;
 
-  const accumulatedFundingTrades = stratTrades.filter((t) => t.type === 'funding_fee_accumulated');
+  const openedTime = openedAt ? new Date(openedAt).getTime() : 0;
+
+  const accumulatedFundingTrades = stratTrades.filter((t) => {
+    if (t.type !== 'funding_fee_accumulated') return false;
+    if (openedTime) {
+      const tTime = new Date(t.createdAt).getTime();
+      return tTime >= openedTime;
+    }
+    return true;
+  });
   const sumAccumulatedFunding = accumulatedFundingTrades.reduce((acc, trade) => acc + Number(trade.pnl || 0), 0);
 
-  const fundingCollected = Number(s.fundingCollected || 0) || sumAccumulatedFunding;
-  const fundingHistoryList = (s.fundingHistory && s.fundingHistory.length > 0)
-    ? s.fundingHistory
+  const rawFundingHistory = s.fundingHistory && s.fundingHistory.length > 0 ? s.fundingHistory : [];
+  const filteredStrategyFundingHistory = rawFundingHistory.filter((h: any) => {
+    if (!openedTime || !h.timestamp) return true;
+    return new Date(h.timestamp).getTime() >= openedTime;
+  });
+  const sumStrategyFundingHistory = filteredStrategyFundingHistory.reduce((acc: number, h: any) => acc + Number(h.amount || 0), 0);
+
+  const fundingCollected = filteredStrategyFundingHistory.length > 0 ? sumStrategyFundingHistory : sumAccumulatedFunding;
+  const fundingHistoryList = filteredStrategyFundingHistory.length > 0
+    ? filteredStrategyFundingHistory
     : accumulatedFundingTrades.flatMap((t: any) => t.fundingHistory || [{ amount: t.pnl, timestamp: t.createdAt }]);
-  const fundingCount = fundingHistoryList.length || s.fundingCount || (s.fundingHistory?.length ?? accumulatedFundingTrades.length);
+  const fundingCount = fundingHistoryList.length;
 
   const estimatedTradingFees = positionSize * 0.0012;
   const totalUnrealizedPnL = marketPnL + fundingCollected;

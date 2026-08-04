@@ -62,6 +62,9 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
     const closeTrade = await PerpArbTrade.create({
       userId,
       strategyId: strat._id,
+      strategyName: strat.name,
+      perpSymbol: strat.perpSymbol,
+      spotSymbol: strat.spotSymbol,
       type: 'close_hedge',
       status: 'executed',
       amount: positionSize,
