@@ -21,20 +21,30 @@ const KNOWN_TOKENS = [
 const EVM_KNOWN_TOKENS: Record<string, string> = {
   '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8': 'USDC',
   '0xaf88d065e77c8cC2239327C5EDb3A432268e5831': 'USDC',
+  '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174': 'USDC',
+  '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359': 'USDC',
   '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1': 'WETH',
+  '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619': 'WETH',
+  '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270': 'WMATIC',
   '0x912CE59144191C1204E64559FE8253a0e49E6548': 'ARB',
   '0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a': 'GMX',
   '0x539bdE0d7Dbd336b79148AA742883198BBF60342': 'MAGIC',
   '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f': 'WBTC',
-  '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9': 'USDT'
+  '0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6': 'WBTC',
+  '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9': 'USDT',
+  '0xc2132D05D31c914a87C6611C10748AEb04B58e8F': 'USDT',
+  '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1': 'DAI',
+  '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063': 'DAI'
 };
 
 const getDisplaySymbol = (mint: string) => {
   if (!mint) return '';
   const solToken = KNOWN_TOKENS.find(t => t.mint === mint);
   if (solToken) return solToken.symbol;
-  if (EVM_KNOWN_TOKENS[mint]) return EVM_KNOWN_TOKENS[mint];
-  return mint;
+  const cleanMint = mint.toLowerCase();
+  const matchKey = Object.keys(EVM_KNOWN_TOKENS).find(k => k.toLowerCase() === cleanMint);
+  if (matchKey) return EVM_KNOWN_TOKENS[matchKey];
+  return mint.slice(0, 6) + '...' + mint.slice(-4);
 };
 
 type Strategy = {
@@ -432,7 +442,7 @@ export default function FlashLoanPage() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
                 <p className="text-xs text-slate-500 mb-1">Borrow Size</p>
-                <p className="text-sm font-semibold text-emerald-400">${strat.borrowAmount.toLocaleString()} {KNOWN_TOKENS.find(t => t.mint === strat.tokenAMint)?.symbol || 'USDC'}</p>
+                <p className="text-sm font-semibold text-emerald-400">${strat.borrowAmount.toLocaleString()} {getDisplaySymbol(strat.tokenAMint)}</p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
                 <p className="text-xs text-slate-500 mb-1">Network</p>
