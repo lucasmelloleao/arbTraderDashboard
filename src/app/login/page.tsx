@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, Mail, User, ShieldCheck } from 'lucide-react';
 
@@ -12,6 +12,59 @@ export default function Login() {
   const [twoFactorToken, setTwoFactorToken] = useState('');
   const [show2fa, setShow2fa] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      router.push('/dashboard');
+      return;
+    }
+
+    // Inicializa o Google One Tap / Google Login Button
+    const initializeGoogleSignIn = () => {
+      if (typeof window !== 'undefined' && (window as any).google) {
+        (window as any).google.accounts.id.initialize({
+          client_id: "471996525470-8ee7qdrfbqpiksr7iio32sigckopjavb.apps.googleusercontent.com", // Placeholder seguro, substituível por Client ID real do usuário
+          callback: handleGoogleResponse,
+        });
+        (window as any).google.accounts.id.renderButton(
+          document.getElementById("googleSignInButton"),
+          { theme: "outline", size: "large", width: 382 }
+        );
+      }
+    };
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogleSignIn;
+    document.head.appendChild(script);
+
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, [router]);
+
+  const handleGoogleResponse = async (response: any) => {
+    setError('');
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        router.push('/dashboard');
+      } else {
+        setError(data.error || 'Google login failed');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,8 +176,8 @@ export default function Login() {
                   maxLength={6}
                 />
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => { setShow2fa(false); setTwoFactorToken(''); setError(''); }}
                 className="mt-2 text-xs text-slate-400 hover:text-white"
               >
@@ -142,16 +195,31 @@ export default function Login() {
         </form>
 
         {!show2fa && (
-          <div className="mt-6 text-center text-sm text-slate-400">
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <button
-              type="button"
-              onClick={() => { setIsLogin(!isLogin); setError(''); }}
-              className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
-            >
-              {isLogin ? 'Sign up' : 'Log in'}
-            </button>
-          </div>
+          <>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-800"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-slate-900 px-2 text-slate-500">Or continue with</span>
+              </div>
+            </div>
+
+            <div className="flex justify-center w-full">
+              <div id="googleSignInButton" className="w-full flex justify-center"></div>
+            </div>
+
+            <div className="mt-6 text-center text-sm text-slate-400">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                type="button"
+                onClick={() => { setIsLogin(!isLogin); setError(''); }}
+                className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+              >
+                {isLogin ? 'Sign up' : 'Log in'}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
