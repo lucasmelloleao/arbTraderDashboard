@@ -32,6 +32,7 @@ export interface PerpArbTrade {
   _id: string;
   userId: string;
   strategyId?: any;
+  openTradeId?: string;
   strategyName?: string;
   perpSymbol?: string;
   spotSymbol?: string;
