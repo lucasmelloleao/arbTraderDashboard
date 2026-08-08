@@ -5,6 +5,7 @@ import { RefreshCw } from 'lucide-react';
 import {
   AreaChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -270,6 +271,10 @@ export default function DashboardOverview() {
               <span className="w-3 h-3 rounded-full bg-indigo-500 inline-block"></span>
               <span className="text-slate-300">Saldo Futuros</span>
             </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 bg-amber-400 inline-block"></span>
+              <span className="text-slate-300">Total (Perp + Spot)</span>
+            </div>
           </div>
         </div>
 
@@ -300,7 +305,7 @@ export default function DashboardOverview() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} vertical={false} />
                   <Tooltip
                     formatter={(value: any, key: any) => {
-                      const label = key === 'spotUsdValue' ? '🟢 Saldo Spot' : key === 'futuresUsdValue' ? '🟣 Saldo Futuros' : '⚪ Total';
+                      const label = key === 'spotUsdValue' ? '🟢 Saldo Spot' : key === 'futuresUsdValue' ? '🟣 Saldo Futuros' : '🟠 Total (Perp + Spot)';
                       return [`$${Number(value).toFixed(2)}`, label];
                     }}
                     labelFormatter={(label: any) => new Date(label).toLocaleString()}
@@ -323,6 +328,16 @@ export default function DashboardOverview() {
                     strokeWidth={2}
                     fillOpacity={1}
                     fill="url(#colorFutures)"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="totalUsdValue"
+                    name="totalUsdValue"
+                    stroke="#f59e0b"
+                    strokeWidth={2.5}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    activeDot={{ r: 4 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
