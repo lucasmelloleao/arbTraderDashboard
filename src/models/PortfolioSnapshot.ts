@@ -27,6 +27,64 @@ const AssetBalanceSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
+const FuturesPositionSchema = new mongoose.Schema({
+    symbol: {
+        type: String,
+        required: true
+    },
+    side: {
+        type: String,
+        required: true
+    },
+    contracts: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+    contractSize: {
+        type: Number,
+        default: 1
+    },
+    notional: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+    entryPrice: {
+        type: Number,
+        default: null
+    },
+    markPrice: {
+        type: Number,
+        default: null
+    },
+    liquidationPrice: {
+        type: Number,
+        default: null
+    },
+    leverage: {
+        type: Number,
+        default: 1
+    },
+    unrealizedPnl: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+    unrealizedPnlPct: {
+        type: Number,
+        default: 0
+    },
+    margin: {
+        type: Number,
+        default: 0
+    },
+    strategyName: {
+        type: String,
+        default: null
+    }
+}, { _id: false });
+
 const PortfolioSnapshotSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -43,6 +101,19 @@ const PortfolioSnapshotSchema = new mongoose.Schema({
         default: 0
     },
     balances: [AssetBalanceSchema],
+    positions: [FuturesPositionSchema],
+    spotTotalUsd: {
+        type: Number,
+        default: 0
+    },
+    futuresTotalUsd: {
+        type: Number,
+        default: 0
+    },
+    futuresUnrealizedPnl: {
+        type: Number,
+        default: 0
+    },
     timestamp: {
         type: Date,
         default: Date.now,

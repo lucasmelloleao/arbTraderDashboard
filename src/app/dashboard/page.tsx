@@ -22,6 +22,10 @@ export default function DashboardOverview() {
   const [totalFuturesUsd, setTotalFuturesUsd] = useState<number>(0);
   const [spotUsdtOnly, setSpotUsdtOnly] = useState<number>(0);
   const [futuresUsdtOnly, setFuturesUsdtOnly] = useState<number>(0);
+  const [spotCoins, setSpotCoins] = useState<any[]>([]);
+  const [futuresPositions, setFuturesPositions] = useState<any[]>([]);
+  const [futuresUnrealizedPnl, setFuturesUnrealizedPnl] = useState<number>(0);
+  const [lastSnapshotAt, setLastSnapshotAt] = useState<string | null>(null);
   const fetchedRef = useRef(false);
 
   const fetchOverviewData = async (forceRefresh: boolean = false) => {
@@ -102,6 +106,28 @@ export default function DashboardOverview() {
 
           const formattedChartData = Object.values(chartDataMap).sort((a: any, b: any) => a.time - b.time);
           setHistoryData(formattedChartData);
+
+          // Extrai o snapshot mais recente para o quadro de moedas spot + posições futuras
+          if (Array.isArray(history) && history.length > 0) {
+            const latest = [...history].sort((a: any, b: any) =>
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            )[0];
+
+            // Moedas spot (exclui o agregado do perp)
+            const coins = (Array.isArray(latest.balances) ? latest.balances : [])
+              .filter((b: any) => {
+                const assetStr = String(b.asset || '').toLowerCase();
+                return !assetStr.includes('perp') && !assetStr.includes('futures');
+              })
+              .filter((b: any) => Number(b.usdValue || 0) > 0 || Number(b.total || 0) > 0);
+            setSpotCoins(coins);
+
+            // Posições futuras
+            const positions = Array.isArray(latest.positions) ? latest.positions : [];
+            setFuturesPositions(positions);
+            setFuturesUnrealizedPnl(Number(latest.futuresUnrealizedPnl || 0));
+            setLastSnapshotAt(latest.timestamp || null);
+          }
         }
       }
     } catch (err) {
@@ -251,6 +277,133 @@ export default function DashboardOverview() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Quadro: Moedas Spot (quantidade + valor USD) */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-white">🪙 Moedas Spot — Quantidade e Valor</h3>
+          {lastSnapshotAt && (
+            <span className="text-xs text-slate-500 font-mono">
+              Atualizado: {new Date(lastSnapshotAt).toLocaleString()}
+            </span>
+          )}
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto shadow-sm">
+          <table className="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
+            <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400">
+              <tr>
+                <th className="px-6 py-4 font-medium">Moeda</th>
+                <th className="px-6 py-4 font-medium text-right">Quantidade</th>
+                <th className="px-6 py-4 font-medium text-right">Disponível</th>
+                <th className="px-6 py-4 font-medium text-right">Valor (USD)</th>
+                <th className="px-6 py-4 font-medium text-right">% do Spot</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">Carregando moedas spot...</td>
+                </tr>
+              ) : spotCoins.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">Nenhuma moeda spot encontrada no snapshot.</td>
+                </tr>
+              ) : (
+                spotCoins.map((coin: any, idx: number) => {
+                  const usd = Number(coin.usdValue || 0);
+                  const spotTotal = spotCoins.reduce((s: number, c: any) => s + Number(c.usdValue || 0), 0);
+                  const pct = spotTotal > 0 ? (usd / spotTotal) * 100 : 0;
+                  return (
+                    <tr key={coin.asset || idx} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="font-semibold text-white">{coin.asset}</span>
+                        <span className="ml-2 text-xs text-slate-500 font-mono">≈ {usd.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT</span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-300">{Number(coin.total || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">{Number(coin.free || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
+                      <td className="px-6 py-4 text-right font-mono text-emerald-400 font-semibold">${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">{pct.toFixed(2)}%</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Quadro: Posições Futuras Abertas */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-white">📊 Posições Futuras Abertas</h3>
+          <span className={`text-sm font-mono font-semibold ${futuresUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            PnL Não Realizado: {futuresUnrealizedPnl >= 0 ? '+' : ''}${futuresUnrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto shadow-sm">
+          <table className="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
+            <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400">
+              <tr>
+                <th className="px-6 py-4 font-medium">Símbolo</th>
+                <th className="px-6 py-4 font-medium">Lado</th>
+                <th className="px-6 py-4 font-medium text-right">Contratos</th>
+                <th className="px-6 py-4 font-medium text-right">Notional (USD)</th>
+                <th className="px-6 py-4 font-medium text-right">Entry / Mark</th>
+                <th className="px-6 py-4 font-medium text-right">Alavancagem</th>
+                <th className="px-6 py-4 font-medium text-right">Margem</th>
+                <th className="px-6 py-4 font-medium text-right">PnL Não Realizado</th>
+                <th className="px-6 py-4 font-medium text-right">PnL %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-8 text-center text-slate-500">Carregando posições futuras...</td>
+                </tr>
+              ) : futuresPositions.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-8 text-center text-slate-500">Nenhuma posição futura aberta.</td>
+                </tr>
+              ) : (
+                futuresPositions.map((pos: any, idx: number) => {
+                  const pnl = Number(pos.unrealizedPnl || 0);
+                  const pnlPct = Number(pos.unrealizedPnlPct || 0);
+                  const pnlColor = pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+                  return (
+                    <tr key={pos.symbol || idx} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="font-semibold text-white">{pos.symbol}</span>
+                        {pos.strategyName && (
+                          <span className="ml-2 text-xs text-slate-500">{pos.strategyName}</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold ${pos.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {String(pos.side || '?').toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-300">{Number(pos.contracts || 0).toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-300">${Number(pos.notional || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">
+                        {pos.entryPrice ? Number(pos.entryPrice).toFixed(6) : '—'}
+                        {pos.markPrice ? ` / ${Number(pos.markPrice).toFixed(6)}` : ''}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">{Number(pos.leverage || 1)}x</td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">${Number(pos.margin || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className={`px-6 py-4 text-right font-mono font-semibold ${pnlColor}`}>
+                        {pnl >= 0 ? '+' : ''}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className={`px-6 py-4 text-right font-mono ${pnlColor}`}>
+                        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
