@@ -69,7 +69,7 @@ export default function DashboardOverview() {
         if (Array.isArray(history)) {
           history.forEach((snapshot: any) => {
             const dateObj = new Date(snapshot.timestamp);
-            dateObj.setSeconds(0, 0);
+            dateObj.setMinutes(0, 0, 0); // agrupa por hora
             const timeKey = dateObj.getTime();
 
             if (!chartDataMap[timeKey]) {
@@ -100,9 +100,10 @@ export default function DashboardOverview() {
               spot = Number(snapshot.totalUsdValue || 0);
             }
 
-            chartDataMap[timeKey].spotUsdValue += spot;
-            chartDataMap[timeKey].futuresUsdValue += futures;
-            chartDataMap[timeKey].totalUsdValue += (spot + futures) || snapshot.totalUsdValue || 0;
+            // Mantém a ÚLTIMA amostra de cada hora (substitui as anteriores da mesma hora)
+            chartDataMap[timeKey].spotUsdValue = spot;
+            chartDataMap[timeKey].futuresUsdValue = futures;
+            chartDataMap[timeKey].totalUsdValue = spot + futures || snapshot.totalUsdValue || 0;
           });
 
           const formattedChartData = Object.values(chartDataMap).sort((a: any, b: any) => a.time - b.time);
@@ -169,12 +170,12 @@ export default function DashboardOverview() {
         setTotalCexUsd(liveSpot + liveFutures);
       }
 
-      // Adiciona ponto ao gráfico (aproveita os dados que já vêm da exchange)
+      // Adiciona ponto ao gráfico (agrupado por hora, consistente com os snapshots)
       setHistoryData(prev => {
         if (!prev || prev.length === 0) return prev;
         const now = new Date();
-        const timeKey = Math.floor(now.getTime() / 60000) * 60000; // agrega por minuto
-        const last = prev[prev.length - 1];
+        now.setMinutes(0, 0, 0); // agrupa por hora
+        const timeKey = now.getTime();
         const newPoint = {
           time: timeKey,
           formattedTime: now.toLocaleString(),
@@ -182,8 +183,9 @@ export default function DashboardOverview() {
           futuresUsdValue: liveFutures,
           totalUsdValue: liveSpot + liveFutures,
         };
-        // Se o último ponto é do mesmo minuto, substitui; senão adiciona
-        const withoutLast = last && Math.abs(last.time - timeKey) < 60000 ? prev.slice(0, -1) : prev;
+        // Se o último ponto é da mesma hora, substitui; senão adiciona
+        const last = prev[prev.length - 1];
+        const withoutLast = last && last.time === timeKey ? prev.slice(0, -1) : prev;
         return [...withoutLast, newPoint];
       });
     } catch (err) {
@@ -298,7 +300,7 @@ export default function DashboardOverview() {
                     tick={{ fill: '#64748b' }}
                     tickFormatter={(val) => {
                       const d = new Date(val);
-                      return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                      return `${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}h`;
                     }}
                   />
                   <YAxis tick={{ fill: '#64748b' }} tickFormatter={(val) => `$${val}`} domain={['auto', 'auto']} />
