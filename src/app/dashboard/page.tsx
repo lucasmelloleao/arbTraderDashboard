@@ -138,10 +138,65 @@ export default function DashboardOverview() {
     }
   };
 
+  const fetchLiveData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/portfolio/live', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.success) return;
+
+      const coins = Array.isArray(data.spotCoins) ? data.spotCoins : [];
+      const positions = Array.isArray(data.positions) ? data.positions : [];
+
+      // Atualiza quadros com dados ao vivo
+      setSpotCoins(coins);
+      setFuturesPositions(positions);
+      setFuturesUnrealizedPnl(Number(data.futuresUnrealizedPnl || 0));
+      setLastSnapshotAt(data.timestamp || null);
+
+      // Atualiza cards de totais spot/futuros com o valor ao vivo
+      if (Number(data.spotTotalUsd) > 0) {
+        setTotalSpotUsd(Number(data.spotTotalUsd));
+      }
+      const liveSpot = Number(data.spotTotalUsd || 0);
+      const liveFutures = positions.reduce((s: number, p: any) => s + Number(p.notional || 0), 0);
+      if (liveSpot > 0 || liveFutures > 0) {
+        setTotalCexUsd(liveSpot + liveFutures);
+      }
+
+      // Adiciona ponto ao gráfico (aproveita os dados que já vêm da exchange)
+      setHistoryData(prev => {
+        if (!prev || prev.length === 0) return prev;
+        const now = new Date();
+        const timeKey = Math.floor(now.getTime() / 60000) * 60000; // agrega por minuto
+        const last = prev[prev.length - 1];
+        const newPoint = {
+          time: timeKey,
+          formattedTime: now.toLocaleString(),
+          spotUsdValue: liveSpot,
+          futuresUsdValue: liveFutures,
+          totalUsdValue: liveSpot + liveFutures,
+        };
+        // Se o último ponto é do mesmo minuto, substitui; senão adiciona
+        const withoutLast = last && Math.abs(last.time - timeKey) < 60000 ? prev.slice(0, -1) : prev;
+        return [...withoutLast, newPoint];
+      });
+    } catch (err) {
+      console.error('Erro ao buscar dados live do portfolio:', err);
+    }
+  };
+
   useEffect(() => {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
     fetchOverviewData(false);
+    // Polling a cada 30s com dados ao vivo da exchange
+    const interval = setInterval(fetchLiveData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -152,7 +207,7 @@ export default function DashboardOverview() {
           <p className="text-slate-400 text-sm">Resumo patrimonial e saldos das corretoras centralizadas</p>
         </div>
         <button
-          onClick={() => fetchOverviewData(true)}
+          onClick={() => { fetchOverviewData(true); fetchLiveData(); }}
           disabled={loading || refreshing}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-all disabled:opacity-50"
         >
