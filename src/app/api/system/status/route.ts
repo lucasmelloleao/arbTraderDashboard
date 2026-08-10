@@ -26,6 +26,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       lastHeartbeat: status?.botLastHeartbeat,
       botMode: status?.botMode || 'simulated',
       connectionMode: status?.connectionMode || 'rpc',
+      botPhase: status?.botPhase || 'discovery',
       enabledNetworks: status?.enabledNetworks || ['solana', 'arbitrum', 'polygon']
     });
   } catch (error: any) {

@@ -54,6 +54,10 @@ export default function PerpetualArbPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [balances, setBalances] = useState({ spotUsdt: 0, spotUsdc: 0, futuresUsdt: 0, futuresUsdc: 0 });
   const [loadingBalances, setLoadingBalances] = useState(false);
+  // Posições futuras REAIS da corretora (entry/mark/PnL) vindas do /api/portfolio/live,
+  // usadas no card de posição aberta para refletir a MEXC (em vez dos preços gravados do trade).
+  const [livePositions, setLivePositions] = useState<any[]>([]);
+  const [liveSpotCoins, setLiveSpotCoins] = useState<any[]>([]);
 
   // ── Derived stats ──
   const totalPnl = trades.reduce((acc, t) => acc + (t.pnl ?? 0), 0);
@@ -234,6 +238,17 @@ export default function PerpetualArbPage() {
     finally { setLoadingBalances(false); }
   };
 
+    const fetchLivePositions = async () => {
+    try {
+      const res = await fetch('/api/portfolio/live', { headers: authHeaders(), cache: 'no-store' });
+            if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.positions)) setLivePositions(data.positions);
+        if (Array.isArray(data.spotCoins)) setLiveSpotCoins(data.spotCoins);
+      }
+    } catch { /* silent */ }
+  };
+
   const fetchSettings = async () => {
     setLoadingSettings(true);
     try {
@@ -332,9 +347,28 @@ export default function PerpetualArbPage() {
     });
   };
 
-  useEffect(() => {
-    fetchStrategies(); fetchTrades(); fetchExchanges(); fetchSettings(); fetchBalances();
-    const interval = setInterval(() => { fetchStrategies(); fetchTrades(); fetchSettings(); }, 5000);
+        useEffect(() => {
+    let isPolling = false;
+
+    const refresh = async () => {
+      if (isPolling) return; // guard anti-reentrância
+      isPolling = true;
+      try {
+        await Promise.allSettled([
+          fetchStrategies(),
+          fetchTrades(),
+          fetchSettings(),
+          fetchLivePositions(),
+        ]);
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    fetchExchanges();
+    fetchBalances();
+    refresh();
+    const interval = setInterval(refresh, 20000);
     return () => clearInterval(interval);
   }, []);
 
@@ -434,7 +468,7 @@ export default function PerpetualArbPage() {
             <Search className="h-4 w-4" /> Busca Manual Cross-Exchange
           </button>
           <button
-            onClick={() => { fetchStrategies(); fetchTrades(); fetchSettings(); fetchBalances(); }}
+            onClick={() => { fetchStrategies(); fetchTrades(); fetchSettings(); fetchBalances(); fetchLivePositions(); }}
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition-colors shadow-lg"
           >
             <RefreshCw className="h-4 w-4" /> Atualizar
@@ -532,11 +566,13 @@ export default function PerpetualArbPage() {
                 Nenhuma operação casada em aberto no momento. O robô irá abrir ordens automaticamente quando o funding for favorável.
               </div>
             ) : (
-              openPositions.map((s) => (
+                            openPositions.map((s) => (
                 <OpenPositionCard
                   key={s._id}
                   strategy={s}
-                  trades={trades}
+                                    trades={trades}
+                  livePositions={livePositions}
+                  liveSpotCoins={liveSpotCoins}
                   isClosingThis={closingSet.has(String(s._id)) || (s.perpSymbol ? closingSet.has(String(s.perpSymbol)) : false)}
                   onClosePosition={handleClosePosition}
                 />

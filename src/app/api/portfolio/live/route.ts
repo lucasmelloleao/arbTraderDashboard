@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import ccxt from 'ccxt';
 import connectMongo from '@/lib/mongodb';
 import ExchangeKey from '@/models/ExchangeKey';
+import PerpArbTrade from '@/models/PerpArbTrade';
 import { decryptSecretKey } from '@/lib/encryption';
 import { withAuth } from '@/lib/auth';
 
@@ -21,6 +22,68 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     const keys = await ExchangeKey.find({ userId, active: true }).lean();
     if (!keys || keys.length === 0) {
       return NextResponse.json({ success: true, spotCoins: [], positions: [], exchanges: [] });
+    }
+
+    // ── Busca posições spot abertas pelo ROBÔ PERPÉTUO (open_hedge sem close_hedge) ────────
+    // Permite calcular o cost basis (preço de compra) da moeda spot automaticamente.
+    const openHedgeTrades = await PerpArbTrade.find({
+      userId,
+      type: 'open_hedge',
+      status: { $in: ['executed', 'simulated'] },
+    }).sort({ createdAt: -1 }).lean();
+
+    // Coleta ids dos open_hedge que JÁ FORAM fechados (para excluí-los)
+    const openTradeIds = openHedgeTrades.map((t: any) => t._id);
+    const closedTrades = await PerpArbTrade.find({
+      userId,
+      type: 'close_hedge',
+      status: { $in: ['executed', 'simulated'] },
+      $or: [
+        { openTradeId: { $in: openTradeIds } },
+        // Fallback: close_hedge sem openTradeId (versões antigas) deve fechar o open mais recente
+        // da mesma perpSymbol/spotSymbol cujo close NÃO exista — tratado abaixo por símbolo.
+      ],
+    }).select('openTradeId perpSymbol spotSymbol createdAt').lean();
+    const closedOpenTradeIds = new Set(closedTrades.map((c: any) => String(c.openTradeId || '')));
+
+    // Para close_hedge SEM openTradeId, marca como fechado o open_hedge (mais antigo) da
+    // mesma base de símbolo que ocorreu ANTES do close. Assim não fica cost basis pendurado.
+    const closesWithoutOpenId = closedTrades.filter((c: any) => !c.openTradeId);
+    if (closesWithoutOpenId.length > 0) {
+      for (const c of closesWithoutOpenId) {
+        const base = String(c.spotSymbol || c.perpSymbol || '').split('/')[0].trim();
+        if (!base) continue;
+        const candidates = openHedgeTrades
+          .filter((o: any) => {
+            const oBase = String(o.spotSymbol || o.perpSymbol || '').split('/')[0].trim();
+            return oBase === base && !closedOpenTradeIds.has(String(o._id));
+          })
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        // Fecha o mais recente (ordem LIFO)
+        const toClose = candidates.find((o: any) => new Date(o.createdAt).getTime() < new Date(c.createdAt).getTime());
+        if (toClose) closedOpenTradeIds.add(String(toClose._id));
+      }
+    }
+
+    // Constrói mapa: baseSymbol -> { totalCost, totalQty, avgPrice }
+    const openSpotCostByBase = new Map<string, { totalCost: number; totalQty: number; avgPrice: number }>();
+    for (const t of openHedgeTrades as any[]) {
+      // Ignora trades já fechados
+      if (closedOpenTradeIds.has(String(t._id))) continue;
+
+      const spotSymbol = String(t.spotSymbol || '');
+      const baseSymbol = spotSymbol.split('/')[0].trim() || spotSymbol;
+      if (!baseSymbol || !t.spotPrice || t.spotPrice <= 0) continue;
+
+      const amount = Number(t.amount || 0);
+      const qty = amount / t.spotPrice;
+      if (qty <= 0) continue;
+
+      const existing = openSpotCostByBase.get(baseSymbol) || { totalCost: 0, totalQty: 0, avgPrice: 0 };
+      existing.totalCost += amount;
+      existing.totalQty += qty;
+      existing.avgPrice = existing.totalQty > 0 ? existing.totalCost / existing.totalQty : 0;
+      openSpotCostByBase.set(baseSymbol, existing);
     }
 
     const results = await Promise.allSettled(keys.map(async (key: any) => {
@@ -82,6 +145,19 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
           const free = Number(bal[code]?.free ?? bal.free?.[code] ?? 0);
           const used = Number(bal[code]?.used ?? bal.used?.[code] ?? 0);
+
+          // Cálculo de Posição (cost basis) e Lucro/Prejuízo
+          // O cost basis vem dos trades open_hedge do robô perpétuo (preço de compra real)
+          const opBench = openSpotCostByBase.get(code) || null;
+          const totalCost = opBench ? Number(opBench.totalCost || 0) : 0;
+          const totalQty = opBench ? Number(opBench.totalQty || 0) : 0;
+          const avgCostPrice = opBench && opBench.avgPrice > 0 ? opBench.avgPrice : null;
+
+          const investedQty = Math.min(totalQty > 0 ? totalQty : amt, amt);
+          const investedValue = avgCostPrice ? investedQty * avgCostPrice : (totalCost > 0 ? totalCost : 0);
+          const pnl = usdValue - investedValue;
+          const pnlPct = investedValue > 0 ? (pnl / investedValue) * 100 : null;
+
           spotCoins.push({
             exchange: key.name,
             asset: code,
@@ -90,6 +166,12 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
             total: amt,
             usdValue: Number(usdValue.toFixed(4)),
             price: price > 0 ? Number(price.toFixed(8)) : null,
+            avgCostPrice: avgCostPrice ? Number(avgCostPrice.toFixed(8)) : null,
+            totalCost: Number(totalCost.toFixed(2)),
+            totalQty,
+            investedValue: Number(investedValue.toFixed(2)),
+            pnl: Number(pnl.toFixed(4)),
+            pnlPct: pnlPct !== null ? Number(pnlPct.toFixed(2)) : null,
           });
         }
       } catch (spotErr: any) {
@@ -118,16 +200,36 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
               ) || 0;
               const margin = Number(p.initialMargin ?? p.positionMargin ?? 0) || 0;
 
-              // Mark price via ticker (fallback: entry)
-              let markPrice = Number(p.markPrice ?? p.markprice ?? 0) || null;
-              if (!markPrice) {
-                try {
-                  const t = await futEx.fetchTicker(symbol);
-                  markPrice = Number(t?.last || t?.close || 0) || null;
-                } catch { markPrice = null; }
+              // Quantidade real de moedas da posição (contratos × tamanho do contrato).
+              // Ex.: BTW = 18 contratos × 100 (contractSize) = 1800 BTW.
+              const qty = contracts * contractSize;
+
+              // Mark price OFICIAL da corretora. No MEXC o 'markPrice' do fetchPositions
+              // vem nulo, e o 'fetchTicker' retorna o preço de última negociação
+              // (ex.: 0.21909), que não é o preço de marca usado no cálculo de P&L
+              // (ex.: 0.21313). Para refletir o real da corretora, deriva-se o mark a
+              // partir do P&L não realizado informado pela própria exchange:
+              //   short: P&L = (entry − mark) × qty  →  mark = entry − P&L/qty
+              //   long : P&L = (mark − entry) × qty  →  mark = entry + P&L/qty
+              let markPrice: number | null = null;
+              if (qty > 0 && entryPrice !== null && entryPrice > 0 && unrealizedPnl !== 0) {
+                const delta = unrealizedPnl / qty;
+                markPrice = side === 'short' ? entryPrice - delta : entryPrice + delta;
+                markPrice = Number(markPrice.toFixed(8));
               }
+              // Fallback (sem P&L ainda): mark da própria pipe; senão o ticker.
+              if (!markPrice) {
+                markPrice = Number(p.markPrice ?? p.markprice ?? 0) || null;
+                if (!markPrice) {
+                  try {
+                    const t = await futEx.fetchTicker(symbol);
+                    markPrice = Number(t?.last || t?.close || 0) || null;
+                  } catch { markPrice = null; }
+                }
+              }
+
               const notional = markPrice
-                ? contracts * contractSize * markPrice
+                ? qty * markPrice
                 : (entryPrice ? contracts * contractSize * entryPrice : 0);
 
               positions.push({
@@ -136,6 +238,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
                 side,
                 contracts,
                 contractSize,
+                qty: Number(qty.toFixed(4)),
                 notional: Number(notional.toFixed(4)),
                 entryPrice,
                 markPrice,
@@ -167,13 +270,27 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
         const key2 = c.asset;
         if (coinMap.has(key2)) {
           const prev = coinMap.get(key2);
-          coinMap.set(key2, {
+          const merged = {
             ...prev,
             total: prev.total + c.total,
             free: prev.free + c.free,
             used: prev.used + c.used,
             usdValue: prev.usdValue + c.usdValue,
-          });
+          };
+          // Consolida cost basis e P&L
+          const prevTC = Number(prev.totalCost || 0);
+          const curTC = Number(c.totalCost || 0);
+          const prevQty = Number(prev.totalQty || 0);
+          const curQty = Number(c.totalQty || 0);
+          merged.totalCost = prevTC + curTC;
+          merged.totalQty = prevQty + curQty;
+          merged.investedValue = Number((Number(prev.investedValue || 0) + Number(c.investedValue || 0)).toFixed(2));
+          const usd = Number(merged.usdValue || 0);
+          const invested = Number(merged.investedValue || 0);
+          merged.pnl = Number((usd - invested).toFixed(4));
+          merged.pnlPct = invested > 0 ? Number(((merged.pnl / invested) * 100).toFixed(2)) : null;
+          merged.avgCostPrice = merged.totalQty > 0 ? Number((merged.totalCost / merged.totalQty).toFixed(8)) : null;
+          coinMap.set(key2, merged);
         } else {
           coinMap.set(key2, { ...c });
         }

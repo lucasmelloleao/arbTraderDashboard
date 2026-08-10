@@ -142,15 +142,27 @@ export default function ScalpingPage() {
       }
     };
     
-    fetchBotStatus();
+        fetchBotStatus();
     fetchTrades();
     fetchStats();
-    const statusInterval = setInterval(() => {
-        fetchBotStatus();
-        fetchTrades();
-        fetchStats();
-        fetchStrategies();
-    }, 5000);
+    let isPolling = false;
+
+    const refresh = async () => {
+      if (isPolling) return; // guard anti-reentrância
+      isPolling = true;
+      try {
+        await Promise.allSettled([
+          fetchBotStatus(),
+          fetchTrades(),
+          fetchStats(),
+          fetchStrategies(),
+        ]);
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    const statusInterval = setInterval(refresh, 20000);
     
     return () => clearInterval(statusInterval);
   }, []);

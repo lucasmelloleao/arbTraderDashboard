@@ -1,21 +1,15 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
+import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import PerpArbSettings from '@/models/PerpArbSettings';
-import User from '@/models/User';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(req: Request) {
+export const GET = withAuth(async (req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
-    
-    // Simplification for the single-user mode or fetch admin user
-    const users = await User.find({});
-    if (!users.length) return NextResponse.json({ error: 'No user found' }, { status: 404 });
-    const user = users[0];
 
-    let settings = await PerpArbSettings.findOne({ userId: user._id });
+    let settings = await PerpArbSettings.findOne({ userId });
     if (!settings) {
-      settings = await PerpArbSettings.create({ userId: user._id });
+      settings = await PerpArbSettings.create({ userId });
     }
 
     return NextResponse.json(settings);
@@ -23,16 +17,12 @@ export async function GET(req: Request) {
     console.error('Error fetching PerpArbSettings:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+});
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req: NextRequest, userId: string) => {
   try {
     const body = await req.json();
     await connectToDatabase();
-
-    const users = await User.find({});
-    if (!users.length) return NextResponse.json({ error: 'No user found' }, { status: 404 });
-    const user = users[0];
 
     // Remove immutable fields if present
     const updateData = { ...body };
@@ -40,7 +30,7 @@ export async function POST(req: Request) {
     delete updateData.userId;
 
     const settings = await PerpArbSettings.findOneAndUpdate(
-      { userId: user._id },
+      { userId },
       { $set: updateData },
       { new: true, upsert: true }
     );
@@ -50,4 +40,5 @@ export async function POST(req: Request) {
     console.error('Error updating PerpArbSettings:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+});
+

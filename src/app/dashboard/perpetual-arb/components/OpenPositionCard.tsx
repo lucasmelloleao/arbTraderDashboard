@@ -8,6 +8,8 @@ import { PerpArbTrade } from '../types';
 interface OpenPositionCardProps {
   strategy: any;
   trades: PerpArbTrade[];
+  livePositions?: any[];
+  liveSpotCoins?: any[];
   isClosingThis: boolean;
   onClosePosition: (strategy: any) => void;
 }
@@ -31,10 +33,28 @@ function formatElapsed(openedAt: string | Date | undefined): string {
 export function OpenPositionCard({
   strategy: s,
   trades,
+  livePositions = [],
+  liveSpotCoins = [],
   isClosingThis,
   onClosePosition,
 }: OpenPositionCardProps) {
-  const positionSize = Number(s.positionSize || s.tradeSize || 0);
+  // Posição FUTURA REAL da corretora (entry/mark/PnL) correspondente a este par, vinda
+  // do /api/portfolio/live. Reflete a MEXC com fidelidade (em vez de preços gravados).
+  const livePos = (livePositions || []).find((lp: any) => {
+    const lpSym = String(lp.symbol || '').toLowerCase();
+    const perpSym = (s.perpSymbol || '').toLowerCase();
+    return lpSym === perpSym || lpSym.replace('/usdt:usdt', '/usdt') === perpSym;
+  });
+
+  // Moeda SPOT real correspondente à base deste par (ex.: "BTW" de "BTW/USDT").
+  // Usa o cost basis médio real (avgCostPrice) e o P&L real da posição spot da
+  // corretora, em vez do preço gravado no trade de abertura (que não bate com a MEXC).
+  const spotBase = String(s.spotSymbol || s.perpSymbol || '').split('/')[0].trim();
+  const spotCoin = (liveSpotCoins || []).find((c: any) => String(c.asset || '').toUpperCase() === spotBase.toUpperCase());
+
+  const positionSize = livePos && Number(livePos.notional) > 0
+    ? Number(livePos.notional)
+    : Number(s.positionSize || s.tradeSize || 0);
 
   const stratTrades = trades.filter((t) => {
     const sId = typeof t.strategyId === 'object' && t.strategyId !== null ? (t.strategyId as any)._id : t.strategyId;
@@ -57,21 +77,41 @@ export function OpenPositionCard({
     return () => clearInterval(interval);
   }, [openedAt]);
 
-  const entrySpot = openTrade?.spotPrice || s.lastSpotPrice || 0;
-  const entryPerp = openTrade?.perpPrice || s.lastPerpPrice || 0;
+      // Entry do SPOT e do PERP: no hedge delta-neutro (1X) o robô compra spot e vende
+      // perp ao MESMO preço de entrada. Por isso prioriza o entry REAL da posição perp
+      // (livePos.entryPrice = 0.19647 p/ BTW), tanto para o long quanto para o short.
+      // O cost basis geral da moeda (avgCostPrice) é descartado aqui, pois reflete o
+      // preço médio de TODA a carteira spot e não a entrada desta operação de hedge.
+      const entrySpot = livePos && Number(livePos.entryPrice) > 0
+        ? Number(livePos.entryPrice)
+        : Number(spotCoin && Number(spotCoin.avgCostPrice) > 0 ? spotCoin.avgCostPrice : 0) || (openTrade?.spotPrice || s.lastSpotPrice || 0);
 
-  // Preço REAL de Execução a Mercado se fosse fechar AGORA:
-  // - Vende SPOT no BID (preço de comprador no livro Spot)
+      // Preço de entrada do PERP: prioriza o valor REAL da posição da corretora (livePos),
+      // senão o preço gravado no trade de abertura.
+      const entryPerp = livePos ? Number(livePos.entryPrice) || 0 : (openTrade?.perpPrice || s.lastPerpPrice || 0);
+
+  // Preço real de marca da corretora (usado para P&L) e tickers para a saída estimada.
+  const liveMarkPrice = livePos ? Number(livePos.markPrice) || 0 : 0;
+
+    // Preço REAL de Execução a Mercado se fosse fechar AGORA:
+  // - Vende SPOT no BID (preço de comprador no livro Spot). Prioriza o preço spot
+  //   ATUAL vindo do /api/portfolio/live (fetchTicker na hora), pois o s.lastSpotPrice
+  //   pode estar congelado no valor gravado no trade de abertura.
   // - Compra PERP no ASK (preço de vendedor no livro Futuros)
-  const exitSpotPrice = s.lastSpotBid || s.lastSpotPrice || entrySpot;
-  const exitPerpPrice = s.lastPerpAsk || s.lastPerpPrice || entryPerp;
+  const exitSpotPrice = spotCoin && Number(spotCoin.price) > 0
+    ? Number(spotCoin.price)
+    : (s.lastSpotBid || s.lastSpotPrice || entrySpot);
+  const exitPerpPrice = liveMarkPrice || s.lastPerpAsk || s.lastPerpPrice || entryPerp;
 
   const spotUnits = entrySpot > 0 ? positionSize / entrySpot : 0;
   const perpUnits = entryPerp > 0 ? positionSize / entryPerp : 0;
 
-  // PnL REAL de saída instantânea a mercado
+    // PnL REAL de saída instantânea a mercado. Como spot e perp entram no MESMO preço
+  // (hedge 1X, entry = livePos.entryPrice = 0.19647), o P&L do long é o ganho/prejuízo
+  // do preço spot atual vs entrada; e o do short vem da própria exchange (livePos.unrealizedPnl).
   const spotPnL = spotUnits > 0 && exitSpotPrice > 0 ? (exitSpotPrice - entrySpot) * spotUnits : 0;
-  const perpPnL = perpUnits > 0 && exitPerpPrice > 0 ? (entryPerp - exitPerpPrice) * perpUnits : 0;
+  const perpPnL = livePos ? Number(livePos.unrealizedPnl) || 0
+    : (perpUnits > 0 && exitPerpPrice > 0 ? (entryPerp - exitPerpPrice) * perpUnits : 0);
   const marketPnL = spotPnL + perpPnL;
 
   const openedTime = openedAt ? new Date(openedAt).getTime() : 0;
@@ -116,7 +156,9 @@ export function OpenPositionCard({
   const currentSpread = exitPerpPrice > 0 ? ((exitSpotPrice - exitPerpPrice) / exitPerpPrice) * 100 : 0;
   const spreadUsd = positionSize * (currentSpread / 100);
   const currentApr = (currentFundingVal !== null ? Number(currentFundingVal) : 0) * 3 * 365;
-  const estLiqPrice = entryPerp > 0 ? entryPerp * 1.95 : null;
+  const estLiqPrice = livePos && Number(livePos.liquidationPrice) > 0
+    ? Number(livePos.liquidationPrice)
+    : (entryPerp > 0 ? entryPerp * 1.95 : null);
 
   const fmtUSDT = (val: number) => {
     const s = val >= 0 ? `+$${val.toFixed(4)}` : `-$${Math.abs(val).toFixed(4)}`;

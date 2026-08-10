@@ -13,8 +13,9 @@ const ExchangeKeySchema = new mongoose.Schema({
   futuresUsdt: { type: Number, default: 0 },
   futuresUsdc: { type: Number, default: 0 },
   futuresTotalEquity: { type: Number, default: 0 },
-  balancesUpdatedAt: { type: Date },
+    balancesUpdatedAt: { type: Date },
   createdAt: { type: Date, default: Date.now }
 });
 
 export default mongoose.models.ExchangeKey || mongoose.model('ExchangeKey', ExchangeKeySchema);
+

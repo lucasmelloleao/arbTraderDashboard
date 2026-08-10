@@ -5,6 +5,7 @@ const SystemStatusSchema = new mongoose.Schema({
   botLastHeartbeat: { type: Date, default: null },
   botMode: { type: String, enum: ['simulated', 'live'], default: 'simulated' },
   connectionMode: { type: String, enum: ['rpc', 'wss'], default: 'rpc' },
+  botPhase: { type: String, enum: ['discovery', 'monitoring'], default: 'discovery' },
   enabledNetworks: { type: [String], enum: ['solana', 'arbitrum', 'polygon'], default: ['solana', 'arbitrum', 'polygon'] },
   status: { type: String, default: 'offline' }
 });

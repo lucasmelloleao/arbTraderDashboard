@@ -169,7 +169,7 @@ export default function FlashLoanPage() {
       if (res.ok) {
         const data = await res.json();
                 setBotOnline(data.botOnline);
-        // Só atualiza as redes se não houver alteração local pendente
+        // SÃ³ atualiza as redes se nÃ£o houver alteraÃ§Ã£o local pendente
         if (data.enabledNetworks && !networksDirtyRef.current) setEnabledNetworks(data.enabledNetworks);
       }
     } catch (e) {
@@ -183,7 +183,7 @@ export default function FlashLoanPage() {
       ? enabledNetworks.filter(n => n !== network)
       : [...enabledNetworks, network];
     
-        // Marca como pendente para o polling não sobrescrever
+        // Marca como pendente para o polling nÃ£o sobrescrever
     networksDirtyRef.current = true;
     setEnabledNetworks(newNetworks);
     
@@ -218,11 +218,24 @@ export default function FlashLoanPage() {
     fetchWallets();
     checkBotStatus();
     fetchTrades();
-    const interval = setInterval(() => {
-      checkBotStatus();
-      fetchTrades();
-      fetchStrategies();
-    }, 5000);
+    let isPolling = false;
+
+    const refresh = async () => {
+      if (isPolling) return; // guard anti-reentrancia
+      isPolling = true;
+      try {
+        await Promise.allSettled([
+          checkBotStatus(),
+          fetchTrades(),
+          fetchStrategies(),
+        ]);
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    refresh();
+    const interval = setInterval(refresh, 20000);
     return () => clearInterval(interval);
   }, []);
 
@@ -244,7 +257,7 @@ export default function FlashLoanPage() {
       setIsFormOpen(false);
     } else {
       const data = await res.json();
-      alert(`Erro: ${data.error || 'Falha ao criar estratégia'}`);
+      alert(`Erro: ${data.error || 'Falha ao criar estratÃ©gia'}`);
     }
   };
 
@@ -275,7 +288,7 @@ export default function FlashLoanPage() {
       fetchStrategies();
     } else {
       const data = await res.json();
-      alert(`Erro: ${data.error || 'Falha ao editar estratégia'}`);
+      alert(`Erro: ${data.error || 'Falha ao editar estratÃ©gia'}`);
     }
   };
 
@@ -331,7 +344,7 @@ export default function FlashLoanPage() {
               isFormOpen ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-indigo-600 text-white hover:bg-indigo-700"
             )}
           >
-            {isFormOpen ? 'Cancelar' : <><Plus className="w-4 h-4" /> Nova estratégia</>}
+            {isFormOpen ? 'Cancelar' : <><Plus className="w-4 h-4" /> Nova estratÃ©gia</>}
           </button>
         </div>
         
@@ -424,7 +437,7 @@ export default function FlashLoanPage() {
                 </h4>
                 <p className="text-xs text-slate-400 font-mono mt-1 flex items-center gap-2">
                   <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded text-[10px] font-bold">{strat.tokenBSymbol || 'UNKNOWN'}</span>
-                  {strat.tokenBMint.includes(',') ? <span className="text-[10px]">Múltiplos Contratos</span> : `${strat.tokenBMint.substring(0,6)}...${strat.tokenBMint.substring(strat.tokenBMint.length-6)}`}
+                  {strat.tokenBMint.includes(',') ? <span className="text-[10px]">MÃºltiplos Contratos</span> : `${strat.tokenBMint.substring(0,6)}...${strat.tokenBMint.substring(strat.tokenBMint.length-6)}`}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -453,7 +466,7 @@ export default function FlashLoanPage() {
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
                 <p className="text-xs text-slate-500 mb-1">Lending Prov.</p>
                 <p className="text-sm font-semibold text-indigo-400 capitalize">
-                  {strat.lendingProvider === 'kamino' ? 'Kamino' : strat.lendingProvider === 'none' ? 'Recursos Próprios' : strat.lendingProvider} 
+                  {strat.lendingProvider === 'kamino' ? 'Kamino' : strat.lendingProvider === 'none' ? 'Recursos PrÃ³prios' : strat.lendingProvider} 
                 </p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
@@ -536,7 +549,7 @@ export default function FlashLoanPage() {
                   <>
                     <option value="solend">Solend (Main Pool)</option>
                     <option value="kamino">Kamino Finance (K-Lend)</option>
-                    <option value="none">Recursos Próprios (Sem Flash Loan)</option>
+                    <option value="none">Recursos PrÃ³prios (Sem Flash Loan)</option>
                   </>
                 ) : (
                   <>
@@ -695,9 +708,9 @@ export default function FlashLoanPage() {
                   <ScanSearch className="w-4 h-4 text-white" />
                 </div>
                 <h4 className="text-xl font-bold text-white tracking-tight">Monitor Solana</h4>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)'}}>SCAN RÁPIDO</span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)'}}>SCAN RÃPIDO</span>
               </div>
-              <p className="text-sm text-slate-400 ml-12">Cotações ao vivo via RPC · Orca · Raydium · Meteora · SOL/USDC</p>
+              <p className="text-sm text-slate-400 ml-12">CotaÃ§Ãµes ao vivo via RPC Â· Orca Â· Raydium Â· Meteora Â· SOL/USDC</p>
             </div>
 
             <div className="flex items-center gap-3 ml-12 sm:ml-0">
@@ -722,7 +735,7 @@ export default function FlashLoanPage() {
                   onChange={() => {}}
                   className="w-4 h-4 text-rose-500 bg-slate-900 border-slate-700 rounded focus:ring-rose-500 focus:ring-2 pointer-events-none"
                 />
-                <span className="text-xs text-rose-400 font-bold uppercase tracking-wider">Forçar Jito</span>
+                <span className="text-xs text-rose-400 font-bold uppercase tracking-wider">ForÃ§ar Jito</span>
               </div>
 
               <button
@@ -753,7 +766,7 @@ export default function FlashLoanPage() {
               </div>
               <div className="text-center">
                 <p className="text-slate-300 font-medium mb-2">Pronto para escanear o mercado</p>
-                <p className="text-sm text-slate-500">Clique em <span className="text-violet-400 font-semibold">Executar Scan</span> para buscar as cotações ao vivo</p>
+                <p className="text-sm text-slate-500">Clique em <span className="text-violet-400 font-semibold">Executar Scan</span> para buscar as cotaÃ§Ãµes ao vivo</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2">
                 <span className="text-slate-500">Servidor:</span>
@@ -777,7 +790,7 @@ export default function FlashLoanPage() {
               </div>
               <div className="text-center">
                 <p className="text-white font-semibold mb-1">Conectando ao RPC Solana...</p>
-                <p className="text-sm text-slate-500">Lendo estado das pools Orca · Raydium · Meteora</p>
+                <p className="text-sm text-slate-500">Lendo estado das pools Orca Â· Raydium Â· Meteora</p>
               </div>
               <div className="flex items-center gap-3">
                 {['Orca', 'Raydium', 'Meteora'].map((d, i) => (
@@ -823,12 +836,12 @@ export default function FlashLoanPage() {
                 {/* Meta row */}
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-slate-600 font-mono">{new Date(r.timestamp).toLocaleTimeString('pt-BR')}</span>
-                  <span className="text-slate-700">·</span>
+                  <span className="text-slate-700">Â·</span>
                   <span className="text-slate-500 font-mono font-semibold">{r.pair}</span>
-                  <span className="text-slate-700">·</span>
+                  <span className="text-slate-700">Â·</span>
                   <span className="text-slate-500">${r.borrowAmount} USDC simulados</span>
-                  <span className="text-slate-700">·</span>
-                  <span className="text-slate-600">⚡ {r.durationMs}ms via RPC</span>
+                  <span className="text-slate-700">Â·</span>
+                  <span className="text-slate-600">âš¡ {r.durationMs}ms via RPC</span>
                   <button
                     onClick={runMonitorSnapshot}
                     className="ml-auto flex items-center gap-1.5 text-slate-400 hover:text-violet-400 transition-colors bg-slate-800/60 hover:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/50"
@@ -889,7 +902,7 @@ export default function FlashLoanPage() {
                                 ${q.price.toFixed(2)}
                                 <span className="text-base font-normal text-slate-500 ml-1">.{q.price.toFixed(6).split('.')[1]?.slice(2)}</span>
                               </p>
-                              <p className="text-xs text-slate-500 mt-1">1 SOL → USDC</p>
+                              <p className="text-xs text-slate-500 mt-1">1 SOL â†’ USDC</p>
                             </div>
 
                             {/* Spread bar */}
@@ -906,7 +919,7 @@ export default function FlashLoanPage() {
                                       border: `1px solid ${q.feeSource === 'onchain' ? 'rgba(16,185,129,0.25)' : 'rgba(100,116,139,0.2)'}`,
                                     }}
                                   >
-                                    {q.feeSource === 'onchain' ? '⛓ on-chain' : 'estimada'}
+                                    {q.feeSource === 'onchain' ? 'â›“ on-chain' : 'estimada'}
                                   </span>
                                   <span className="text-slate-500 font-mono">Fee {(q.feeRawPct ?? ((1 - q.fee) * 100)).toFixed(3)}%</span>
                                 </div>
@@ -921,7 +934,7 @@ export default function FlashLoanPage() {
                           </>
                         ) : (
                           <div className="py-4">
-                            <p className="text-sm text-slate-500">Pool indisponível</p>
+                            <p className="text-sm text-slate-500">Pool indisponÃ­vel</p>
                             <p className="text-xs text-slate-600 mt-1">{q.error}</p>
                           </div>
                         )}
@@ -943,7 +956,7 @@ export default function FlashLoanPage() {
                       </div>
                     </div>
                     <div className="text-right text-xs">
-                      <p className="text-slate-600">Diferença</p>
+                      <p className="text-slate-600">DiferenÃ§a</p>
                       <p className="text-slate-300 font-mono font-semibold">${(maxPrice - minPrice).toFixed(4)}</p>
                     </div>
                   </div>
@@ -977,7 +990,7 @@ export default function FlashLoanPage() {
                       <p className="text-xs text-slate-500">
                         {r.hasOpportunity
                           ? `Lucro potencial com $${r.borrowAmount} USDC de capital`
-                          : 'Spread insuficiente para cobrir as taxas de transação'}
+                          : 'Spread insuficiente para cobrir as taxas de transaÃ§Ã£o'}
                       </p>
                     </div>
 
@@ -995,7 +1008,7 @@ export default function FlashLoanPage() {
 
                   {/* Routes table */}
                   <div className="px-6 py-4 space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest text-slate-600 font-bold mb-3">Todas as rotas · ordenadas por profit</p>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-600 font-bold mb-3">Todas as rotas Â· ordenadas por profit</p>
                     {r.allRoutes.map((route: any, i: number) => {
                       const isFirst = i === 0;
                       const maxAbs = Math.abs(r.allRoutes[0]?.profit || 1);
@@ -1026,7 +1039,7 @@ export default function FlashLoanPage() {
                   </div>
                 </div>
 
-                {/* ===== SIMULAÇÃO DE FLASH LOAN ===== */}
+                {/* ===== SIMULAÃ‡ÃƒO DE FLASH LOAN ===== */}
                 {r.flashLoanSim && r.flashLoanSim.triggered && (() => {
                   const sim = r.flashLoanSim;
                   const isProfit = sim.isProfitable;
@@ -1061,9 +1074,9 @@ export default function FlashLoanPage() {
                           <Zap className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                          <p className="text-white font-black text-base">Simulação de Flash Loan</p>
+                          <p className="text-white font-black text-base">SimulaÃ§Ã£o de Flash Loan</p>
                           <p className="text-xs text-slate-500">
-                            Disparado porque profit bruto (${sim.grossProfit.toFixed(4)}) &lt; ${sim.threshold.toFixed(2)} · Protocolo: {sim.lendingProvider}
+                            Disparado porque profit bruto (${sim.grossProfit.toFixed(4)}) &lt; ${sim.threshold.toFixed(2)} Â· Protocolo: {sim.lendingProvider}
                           </p>
                         </div>
                         <div className={`ml-auto px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider ${
@@ -1073,7 +1086,7 @@ export default function FlashLoanPage() {
                               ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
                               : 'text-rose-400 bg-rose-500/10 border border-rose-500/20'
                         }`}>
-                          {isProfit ? 'Lucrativo' : isWarn ? 'Marginal' : 'Inviável'}
+                          {isProfit ? 'Lucrativo' : isWarn ? 'Marginal' : 'InviÃ¡vel'}
                         </div>
                       </div>
 
@@ -1108,7 +1121,7 @@ export default function FlashLoanPage() {
                                 <span className="text-sm text-slate-400">{sim.fees.lendingProvider} Flash Loan Fee</span>
                                 <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded font-mono">{sim.fees.flashLoanFeePct.toFixed(2)}%</span>
                               </div>
-                              <span className="font-mono text-sm text-rose-400/80">−${sim.fees.flashLoanFee.toFixed(6)}</span>
+                              <span className="font-mono text-sm text-rose-400/80">âˆ’${sim.fees.flashLoanFee.toFixed(6)}</span>
                             </div>
 
                             {/* Solana network fee */}
@@ -1118,7 +1131,7 @@ export default function FlashLoanPage() {
                                 <span className="text-sm text-slate-400">Solana Network Fee</span>
                                 <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded font-mono">~0.00041 SOL</span>
                               </div>
-                              <span className="font-mono text-sm text-rose-400/80">−${sim.fees.solanaNetworkFee.toFixed(6)}</span>
+                              <span className="font-mono text-sm text-rose-400/80">âˆ’${sim.fees.solanaNetworkFee.toFixed(6)}</span>
                             </div>
 
                             {/* Jito bundle tip */}
@@ -1128,14 +1141,14 @@ export default function FlashLoanPage() {
                                 <span className="text-sm text-slate-400">Jito Bundle Tip</span>
                                 <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded font-mono">0.001 SOL</span>
                               </div>
-                              <span className="font-mono text-sm text-rose-400/80">−${sim.fees.jitoBundleTip.toFixed(6)}</span>
+                              <span className="font-mono text-sm text-rose-400/80">âˆ’${sim.fees.jitoBundleTip.toFixed(6)}</span>
                             </div>
 
                             {/* Total fees divider */}
                             <div className="border-t border-slate-800/80 pt-2">
                               <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.1)'}}>
                                 <span className="text-sm font-semibold text-slate-300">Total de Taxas</span>
-                                <span className="font-mono font-bold text-sm text-rose-400">−${sim.fees.totalFees.toFixed(6)}</span>
+                                <span className="font-mono font-bold text-sm text-rose-400">âˆ’${sim.fees.totalFees.toFixed(6)}</span>
                               </div>
                             </div>
                           </div>
@@ -1152,12 +1165,12 @@ export default function FlashLoanPage() {
                           }}
                         >
                           <div>
-                            <p className="text-xs text-slate-500 mb-1">Lucro Líquido (após todas as taxas)</p>
+                            <p className="text-xs text-slate-500 mb-1">Lucro LÃ­quido (apÃ³s todas as taxas)</p>
                             <p className={`text-3xl font-black font-mono ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
                               {sim.netProfit >= 0 ? '+' : ''}${sim.netProfit.toFixed(6)}
                             </p>
                             <p className={`text-xs font-mono font-semibold mt-0.5 ${isProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
-                              {sim.netProfitPct >= 0 ? '+' : ''}{sim.netProfitPct.toFixed(4)}% ROI líquido
+                              {sim.netProfitPct >= 0 ? '+' : ''}{sim.netProfitPct.toFixed(4)}% ROI lÃ­quido
                             </p>
                           </div>
                           <div className="text-right">
@@ -1168,7 +1181,7 @@ export default function FlashLoanPage() {
 
                         {/* Veredito */}
                         <div className="flex items-start gap-3 px-4 py-3 rounded-xl" style={{background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(30,41,59,0.5)'}}>
-                          <div className="text-base mt-0.5">{isProfit ? '✅' : isWarn ? '⚠️' : '❌'}</div>
+                          <div className="text-base mt-0.5">{isProfit ? 'âœ…' : isWarn ? 'âš ï¸' : 'âŒ'}</div>
                           <div>
                             <p className={`text-sm font-bold ${isProfit ? 'text-emerald-400' : isWarn ? 'text-amber-400' : 'text-rose-400'}`}>
                               Veredito
@@ -1181,8 +1194,8 @@ export default function FlashLoanPage() {
                         {!isProfit && isFinite(sim.breakEvenCapital) && (
                           <div className="flex items-center justify-between px-4 py-3 rounded-xl" style={{background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)'}}>
                             <div>
-                              <p className="text-xs text-slate-500 mb-0.5">Capital mínimo para break-even</p>
-                              <p className="text-xs text-slate-600">Com este spread, seria necessário:</p>
+                              <p className="text-xs text-slate-500 mb-0.5">Capital mÃ­nimo para break-even</p>
+                              <p className="text-xs text-slate-600">Com este spread, seria necessÃ¡rio:</p>
                             </div>
                             <div className="text-right">
                               <p className="text-2xl font-black font-mono text-violet-300">
@@ -1197,7 +1210,7 @@ export default function FlashLoanPage() {
                     </div>
                   );
                 })()}
-                {/* ===== FIM DA SIMULAÇÃO ===== */}
+                {/* ===== FIM DA SIMULAÃ‡ÃƒO ===== */}
 
               </div>
             );
@@ -1222,7 +1235,7 @@ export default function FlashLoanPage() {
                 <h4 className="text-xl font-bold text-white tracking-tight">IA Estrategista</h4>
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: 'rgba(236,72,153,0.15)', color: '#f472b6', border: '1px solid rgba(236,72,153,0.3)'}}>MERCADO AO VIVO</span>
               </div>
-              <p className="text-sm text-slate-400 ml-12">A inteligência artificial analisa o DexScreener buscando as melhores oportunidades de Flash Loan na Solana.</p>
+              <p className="text-sm text-slate-400 ml-12">A inteligÃªncia artificial analisa o DexScreener buscando as melhores oportunidades de Flash Loan na Solana.</p>
             </div>
             
             <button
@@ -1244,7 +1257,7 @@ export default function FlashLoanPage() {
               <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{background: 'radial-gradient(circle, rgba(236,72,153,0.15) 0%, transparent 70%)', border: '1px dashed rgba(236,72,153,0.3)'}}>
                 <Zap className="w-8 h-8 text-pink-500/60" />
               </div>
-              <p className="text-slate-400 text-sm">Clique em &quot;Buscar Oportunidades com IA&quot; para gerar estratégias.</p>
+              <p className="text-slate-400 text-sm">Clique em &quot;Buscar Oportunidades com IA&quot; para gerar estratÃ©gias.</p>
             </div>
           )}
 
@@ -1294,7 +1307,7 @@ export default function FlashLoanPage() {
                     }}
                     className="w-full bg-pink-500/10 hover:bg-pink-500 text-pink-400 hover:text-white border border-pink-500/30 font-bold text-sm px-4 py-2 rounded-lg transition-all flex items-center justify-center gap-2"
                   >
-                    <Plus className="w-4 h-4" /> Implementar Estratégia
+                    <Plus className="w-4 h-4" /> Implementar EstratÃ©gia
                   </button>
                 </div>
               ))}
@@ -1350,7 +1363,7 @@ export default function FlashLoanPage() {
                       <>
                         <option value="solend">Solend (Main Pool)</option>
                         <option value="kamino">Kamino Finance (K-Lend)</option>
-                        <option value="none">Recursos Próprios</option>
+                        <option value="none">Recursos PrÃ³prios</option>
                       </>
                     ) : (
                       <>

@@ -24,6 +24,26 @@ const AssetBalanceSchema = new mongoose.Schema({
         type: Number,
         required: true,
         default: 0
+    },
+    avgCostPrice: {
+        type: Number,
+        default: null
+    },
+    investedValue: {
+        type: Number,
+        default: 0
+    },
+    totalQty: {
+        type: Number,
+        default: 0
+    },
+    pnl: {
+        type: Number,
+        default: 0
+    },
+    pnlPct: {
+        type: Number,
+        default: null
     }
 }, { _id: false });
 
@@ -125,3 +145,4 @@ const PortfolioSnapshotSchema = new mongoose.Schema({
 PortfolioSnapshotSchema.index({ userId: 1, exchange: 1, timestamp: -1 });
 
 export default mongoose.models.PortfolioSnapshot || mongoose.model('PortfolioSnapshot', PortfolioSnapshotSchema);
+
