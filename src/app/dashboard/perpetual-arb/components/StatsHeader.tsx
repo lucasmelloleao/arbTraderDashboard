@@ -3,6 +3,34 @@
 import React from 'react';
 import { Activity, TrendingUp, DollarSign, Wallet, RefreshCw } from 'lucide-react';
 
+export interface ExchangeBalance {
+  id?: string;
+  name?: string;
+  exchangeId?: string;
+  spotUsdt?: number;
+  spotUsdc?: number;
+  spotTotalEquity?: number;
+  futuresUsdt?: number;
+  futuresUsdc?: number;
+  futuresTotalEquity?: number;
+  updatedAt?: string;
+}
+
+function exchangeLabel(ex: ExchangeBalance): string {
+  const eid = (ex.exchangeId || '').toLowerCase().trim();
+  const prettyId =
+    eid === 'mexc' ? 'MEXC' :
+    eid === 'binance' ? 'Binance' :
+    eid === 'gateio' || eid === 'gate' ? 'Gate.io' :
+    eid === 'bybit' ? 'Bybit' :
+    eid === 'okx' ? 'OKX' :
+    eid === 'bitget' ? 'Bitget' :
+    eid ? eid.charAt(0).toUpperCase() + eid.slice(1) : '';
+  const rawName = (ex.name || '').trim();
+  if (rawName && rawName.toLowerCase() !== eid) return rawName;
+  return prettyId || rawName || 'CEX';
+}
+
 interface StatsHeaderProps {
   openCount: number;
   totalMonitored: number;
@@ -12,6 +40,7 @@ interface StatsHeaderProps {
   spotUsdc?: number;
   futuresUsdt?: number;
   futuresUsdc?: number;
+  exchanges?: ExchangeBalance[];
   loadingBalances?: boolean;
   globalClosedApr?: number | null;
   totalEntryVolume?: number;
@@ -27,76 +56,115 @@ export function StatsHeader({
   spotUsdc = 0,
   futuresUsdt = 0,
   futuresUsdc = 0,
+  exchanges,
   loadingBalances = false,
   globalClosedApr = null,
   totalEntryVolume = 0,
   totalExitVolume = 0,
 }: StatsHeaderProps) {
+  const hasBreakdown = Array.isArray(exchanges) && exchanges.length > 0;
+
+  const renderSpotCard = (label: string, usdt: number, usdc: number) => (
+    <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 shadow-lg flex items-center justify-between">
+      <div>
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+          <Wallet className="h-4 w-4 text-emerald-400" /> Saldo Livre Spot ({label})
+        </div>
+        <div className="mt-2 text-2xl sm:text-3xl font-black text-white flex items-baseline gap-2">
+          {loadingBalances ? (
+            <span className="text-slate-400 text-sm flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" /> Consultando...
+            </span>
+          ) : (
+            <>
+              ${usdt.toFixed(2)} <span className="text-xs font-semibold text-emerald-400">USDT</span>
+              {usdc > 0 && (
+                <span className="text-sm font-normal text-slate-400">
+                  / ${usdc.toFixed(2)} USDC
+                </span>
+              )}
+            </>
+          )}
+        </div>
+        <div className="mt-1 text-[11px] text-slate-400">Disponível para ordens de compra Spot</div>
+      </div>
+      <div className="hidden sm:block text-right">
+        <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-300">
+          Spot LONG
+        </span>
+      </div>
+    </div>
+  );
+
+  const renderFuturesCard = (label: string, usdt: number, usdc: number) => (
+    <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-4 shadow-lg flex items-center justify-between">
+      <div>
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-purple-300">
+          <Wallet className="h-4 w-4 text-purple-400" /> Saldo Livre Futuros ({label})
+        </div>
+        <div className="mt-2 text-2xl sm:text-3xl font-black text-white flex items-baseline gap-2">
+          {loadingBalances ? (
+            <span className="text-slate-400 text-sm flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 animate-spin text-purple-400" /> Consultando...
+            </span>
+          ) : (
+            <>
+              ${usdt.toFixed(2)} <span className="text-xs font-semibold text-purple-400">USDT</span>
+              {usdc > 0 && (
+                <span className="text-sm font-normal text-slate-400">
+                  / ${usdc.toFixed(2)} USDC
+                </span>
+              )}
+            </>
+          )}
+        </div>
+        <div className="mt-1 text-[11px] text-slate-400">Margem livre para ordens de Short Perpétuo</div>
+      </div>
+      <div className="hidden sm:block text-right">
+        <span className="rounded-full bg-purple-500/10 border border-purple-500/30 px-3 py-1 text-xs font-bold text-purple-300">
+          Perp SHORT
+        </span>
+      </div>
+    </div>
+  );
+
   return (
     <div className="mt-4 space-y-4">
-      {/* Linha 1: Saldos em Corretora (Spot & Futuros) */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Card Saldo Spot */}
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 shadow-lg flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">
-              <Wallet className="h-4 w-4 text-emerald-400" /> Saldo Livre Spot (CEX)
-            </div>
-            <div className="mt-2 text-2xl sm:text-3xl font-black text-white flex items-baseline gap-2">
-              {loadingBalances ? (
-                <span className="text-slate-400 text-sm flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" /> Consultando...
-                </span>
-              ) : (
-                <>
-                  ${spotUsdt.toFixed(2)} <span className="text-xs font-semibold text-emerald-400">USDT</span>
-                  {spotUsdc > 0 && (
-                    <span className="text-sm font-normal text-slate-400">
-                      / ${spotUsdc.toFixed(2)} USDC
+      {/* Linha 1: Saldos em Corretora — um QUADRO por exchange quando há exchanges ativas */}
+      <div className="space-y-4">
+        {hasBreakdown ? (
+          exchanges!.map((ex, idx) => {
+            const label = exchangeLabel(ex);
+            const sUsdt = Number(ex.spotUsdt || 0);
+            const sUsdc = Number(ex.spotUsdc || 0);
+            const fUsdt = Number(ex.futuresUsdt || 0);
+            const fUsdc = Number(ex.futuresUsdc || 0);
+            return (
+              <div key={ex.id || idx} className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-bold uppercase tracking-wider text-white">
+                    <Wallet className="h-4 w-4 inline-block mr-2 text-indigo-400" />
+                    {label}
+                  </span>
+                  {ex.updatedAt && (
+                    <span className="text-[11px] text-slate-500">
+                      atualizado {new Date(ex.updatedAt).toLocaleString('pt-BR')}
                     </span>
                   )}
-                </>
-              )}
-            </div>
-            <div className="mt-1 text-[11px] text-slate-400">Disponível para ordens de compra Spot</div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {renderSpotCard(label, sUsdt, sUsdc)}
+                  {renderFuturesCard(label, fUsdt, fUsdc)}
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {renderSpotCard('CEX', spotUsdt, spotUsdc)}
+            {renderFuturesCard('Perpétuo', futuresUsdt, futuresUsdc)}
           </div>
-          <div className="hidden sm:block text-right">
-            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-300">
-              Spot LONG
-            </span>
-          </div>
-        </div>
-
-        {/* Card Saldo Futuros */}
-        <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-4 shadow-lg flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-purple-300">
-              <Wallet className="h-4 w-4 text-purple-400" /> Saldo Livre Futuros (Perpétuo)
-            </div>
-            <div className="mt-2 text-2xl sm:text-3xl font-black text-white flex items-baseline gap-2">
-              {loadingBalances ? (
-                <span className="text-slate-400 text-sm flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-purple-400" /> Consultando...
-                </span>
-              ) : (
-                <>
-                  ${futuresUsdt.toFixed(2)} <span className="text-xs font-semibold text-purple-400">USDT</span>
-                  {futuresUsdc > 0 && (
-                    <span className="text-sm font-normal text-slate-400">
-                      / ${futuresUsdc.toFixed(2)} USDC
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="mt-1 text-[11px] text-slate-400">Margem livre para ordens de Short Perpétuo</div>
-          </div>
-          <div className="hidden sm:block text-right">
-            <span className="rounded-full bg-purple-500/10 border border-purple-500/30 px-3 py-1 text-xs font-bold text-purple-300">
-              Perp SHORT
-            </span>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Linha 2: Métricas do Robô */}

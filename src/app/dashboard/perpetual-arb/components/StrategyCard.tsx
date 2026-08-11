@@ -51,6 +51,11 @@ export function StrategyCard({ strategy, onUpdate, onDelete, onEdit }: StrategyC
           <div className="text-sm text-gray-400">{strategy.perpSymbol} / {strategy.spotSymbol}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {strategy.exchangeId && (
+            <span className="rounded-full bg-indigo-500/15 px-2 py-1 text-[11px] uppercase tracking-[0.2em] text-indigo-200">
+              {String(strategy.exchangeId).toUpperCase()}
+            </span>
+          )}
           <span className={strategy.active ? 'rounded-full bg-emerald-500/15 px-2 py-1 text-[11px] uppercase tracking-[0.2em] text-emerald-200' : 'rounded-full bg-amber-500/15 px-2 py-1 text-[11px] uppercase tracking-[0.2em] text-amber-200'}>
             {strategy.active ? 'Ativa' : 'Inativa'}
           </span>
@@ -133,6 +138,20 @@ export function StrategyCard({ strategy, onUpdate, onDelete, onEdit }: StrategyC
                 {strategy.spotExchangeKeyId ? `${strategy.spotExchangeKeyId.name} (${strategy.spotExchangeKeyId.exchangeId})` : <span className="text-slate-600 italic">não definida</span>}
               </span>
             </div>
+          </div>
+          {/* Origem resumida da estratégia */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/5 pt-2 text-xs">
+            <span className={strategy.isAutoCreated ? 'text-cyan-300' : 'text-slate-400'}>
+              {strategy.isAutoCreated ? '🤖 Criada pelo robô scanner' : '🙋 Criada manualmente'}
+            </span>
+            {strategy.settingsId && (
+              <>
+                <span className="text-slate-600">•</span>
+                <span className="text-slate-400">
+                  Vinculada às configurações ({String(((strategy.settingsId as any)?._id) || strategy.settingsId).slice(-8)})
+                </span>
+              </>
+            )}
           </div>
         </div>
       )}

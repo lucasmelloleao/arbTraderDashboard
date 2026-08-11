@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const PerpArbSettingsSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
   isScanningEnabled: { type: Boolean, default: false },
+  lastScannedAt: { type: Date, default: null },
   tradeSize: { type: Number, default: 100 },
   minFundingRatePct: { type: Number, default: 0.002 },
   minVolume24hUSD: { type: Number, default: 50000 },

@@ -15,6 +15,7 @@ export const GET = withAuth(async (_req: NextRequest, userId: string) => {
     const strategies = await PerpArbStrategy.find({ userId })
       .populate('perpExchangeKeyId', 'name exchangeId')
       .populate('spotExchangeKeyId', 'name exchangeId')
+      .populate('settingsId', 'tradeSize minFundingRatePct isScanningEnabled lastScannedAt')
       .sort({ createdAt: -1 });
     return NextResponse.json(strategies);
   } catch (error: any) {

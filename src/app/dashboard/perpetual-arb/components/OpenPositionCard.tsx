@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Power } from 'lucide-react';
+import { RefreshCw, Power, XCircle } from 'lucide-react';
 import { FundingCountdown } from './FundingCountdown';
 import { PerpArbTrade } from '../types';
 
@@ -12,6 +12,7 @@ interface OpenPositionCardProps {
   liveSpotCoins?: any[];
   isClosingThis: boolean;
   onClosePosition: (strategy: any) => void;
+  onVoidClose: (strategy: any) => void;
 }
 
 function formatElapsed(openedAt: string | Date | undefined): string {
@@ -37,6 +38,7 @@ export function OpenPositionCard({
   liveSpotCoins = [],
   isClosingThis,
   onClosePosition,
+  onVoidClose,
 }: OpenPositionCardProps) {
   // Posição FUTURA REAL da corretora (entry/mark/PnL) correspondente a este par, vinda
   // do /api/portfolio/live. Reflete a MEXC com fidelidade (em vez de preços gravados).
@@ -203,6 +205,14 @@ export function OpenPositionCard({
                   <Power className="h-3.5 w-3.5" /> Encerrar Agora
                 </>
               )}
+            </button>
+            <button
+              disabled={isClosingThis}
+              onClick={() => onVoidClose(s)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white px-3 py-1.5 text-xs font-bold border border-slate-600/50 transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Marcar como encerrada pela corretora (sem executar ordens, PnL = zero)"
+            >
+              <XCircle className="h-3.5 w-3.5" /> Encerrada pela Corretora
             </button>
           </div>
         </div>

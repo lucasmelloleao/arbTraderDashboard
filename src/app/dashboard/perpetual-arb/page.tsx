@@ -53,6 +53,7 @@ export default function PerpetualArbPage() {
   const [closingSet, setClosingSet] = useState<Set<string>>(new Set());
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [balances, setBalances] = useState({ spotUsdt: 0, spotUsdc: 0, futuresUsdt: 0, futuresUsdc: 0 });
+  const [exchangeBalances, setExchangeBalances] = useState<any[]>([]);
   const [loadingBalances, setLoadingBalances] = useState(false);
   // Posições futuras REAIS da corretora (entry/mark/PnL) vindas do /api/portfolio/live,
   // usadas no card de posição aberta para refletir a MEXC (em vez dos preços gravados do trade).
@@ -233,6 +234,7 @@ export default function PerpetualArbPage() {
           futuresUsdt: Number(data.futuresUsdt || 0),
           futuresUsdc: Number(data.futuresUsdc || 0),
         });
+        setExchangeBalances(Array.isArray(data.exchanges) ? data.exchanges : []);
       }
     } catch { /* silent */ }
     finally { setLoadingBalances(false); }
@@ -344,6 +346,34 @@ export default function PerpetualArbPage() {
     setConfirmState({
       message: `Encerrar a posição de "${s.name}" agora? O robô irá fechar o Spot (Venda) e Perpétuo (Recompra Short) a mercado na MEXC.`,
       onConfirm: () => { closePosition(s._id, s.perpSymbol, s.name); setConfirmState(null); },
+    });
+  };
+
+  const handleVoidClose = (s: any) => {
+    setConfirmState({
+      message: `Marcar "${s.name}" como encerrada pela corretora? Nenhuma ordem será enviada e o PnL será registrado como zero. Use apenas quando a corretora já liquidou/encerrou a posição.`,
+      onConfirm: async () => {
+        setConfirmState(null);
+        const idKey = String(s._id || '');
+        setClosingSet((prev) => { const n = new Set(prev); n.add(idKey); return n; });
+        try {
+          const res = await fetch('/api/perp-arb/void-close', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ strategyId: s._id, perpSymbol: s.perpSymbol }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Falha ao marcar posição');
+          setSuccessMsg(`✅ Posição "${s.name}" marcada como encerrada pela corretora (PnL = $0.00).`);
+          setTimeout(() => setSuccessMsg(null), 6000);
+          await fetchStrategies();
+          await fetchTrades();
+        } catch (err: any) {
+          setError(err.message);
+        } finally {
+          setClosingSet((prev) => { const n = new Set(prev); n.delete(idKey); return n; });
+        }
+      },
     });
   };
 
@@ -509,6 +539,7 @@ export default function PerpetualArbPage() {
         spotUsdc={balances.spotUsdc}
         futuresUsdt={balances.futuresUsdt}
         futuresUsdc={balances.futuresUsdc}
+        exchanges={exchangeBalances}
         loadingBalances={loadingBalances}
         globalClosedApr={closedStats.globalClosedApr}
         totalEntryVolume={closedStats.totalEntryVolume}
@@ -575,6 +606,7 @@ export default function PerpetualArbPage() {
                   liveSpotCoins={liveSpotCoins}
                   isClosingThis={closingSet.has(String(s._id)) || (s.perpSymbol ? closingSet.has(String(s.perpSymbol)) : false)}
                   onClosePosition={handleClosePosition}
+                  onVoidClose={handleVoidClose}
                 />
               ))
             )}

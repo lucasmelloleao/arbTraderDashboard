@@ -5,6 +5,9 @@ const PerpArbStrategySchema = new mongoose.Schema({
   name: { type: String, required: true },
   perpSymbol: { type: String, required: true },  // e.g. 'BTC-PERP'
   spotSymbol: { type: String, required: true },   // e.g. 'BTC/USDT'
+  exchangeId: { type: String, default: null },    // corretora onde opera (mexc, gateio, binance...)
+  settingsId: { type: mongoose.Schema.Types.ObjectId, ref: 'PerpArbSettings', default: null }, // vínculo com PerpArbSettings
+  isAutoCreated: { type: Boolean, default: false }, // criada pelo robô scanner
   tradeSize: { type: Number, required: true },    // in USDT
 
   // ── Exchange keys ─────────────────────────────────────────────────────────

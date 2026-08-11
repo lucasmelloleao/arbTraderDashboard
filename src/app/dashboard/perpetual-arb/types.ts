@@ -23,6 +23,9 @@ export interface PerpArbStrategy {
   fundingHistory?: Array<{ amount: number; timestamp: string | Date; fundingRate?: number }>;
   spotExchangeKeyId?: any;
   perpExchangeKeyId?: any;
+  settingsId?: any;
+  exchangeId?: string;
+  isAutoCreated?: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
   isDeletedStrategy?: boolean;
