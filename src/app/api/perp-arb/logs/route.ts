@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
+import { NodeSSH } from 'node-ssh';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,40 +12,64 @@ export const GET = withAuth(async (req: NextRequest) => {
     const lines = searchParams.get('lines') || '150';
 
     const isServer1 = processName.startsWith('liq-');
-    const defaultHost = isServer1 ? 'http://147.15.122.245:4001' : 'http://163.176.2.243:4001';
-    const backendUrl = process.env.API_SERVER_URL || defaultHost;
+    const hostIp = isServer1 ? '147.15.122.245' : '163.176.2.243';
+    const container = isServer1 ? 'liquidation' : 'bots';
 
-    // Conexao HTTP direta para o servidor Oracle (funciona 100% na Vercel sem precisar de SSH ou Linux binarios)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    // Obtem o conteudo da chave SSH via variavel de ambiente ou arquivo local
+    let privateKey = process.env.SSH_PRIVATE_KEY;
+    if (!privateKey && process.env.SSH_KEY_PATH) {
+      const fs = require('fs');
+      if (fs.existsSync(process.env.SSH_KEY_PATH)) {
+        privateKey = fs.readFileSync(process.env.SSH_KEY_PATH, 'utf8');
+      }
+    }
+    if (!privateKey) {
+      // Tenta o caminho padrao local
+      const fs = require('fs');
+      const defaultPath = 'C:\\Users\\lleao\\Downloads\\ssh.key';
+      if (fs.existsSync(defaultPath)) {
+        privateKey = fs.readFileSync(defaultPath, 'utf8');
+      }
+    }
 
-    const res = await fetch(`${backendUrl}/api/logs?process=${processName}&lines=${lines}`, {
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeoutId));
-
-    if (!res.ok) {
+    if (!privateKey) {
       return NextResponse.json({
         process: processName,
         linesCount: 1,
-        logs: [`⚠️ Servidor Oracle retornou status ${res.status}. Verifique se o docker container está rodando.`],
+        logs: ['⚠️ Variavel SSH_PRIVATE_KEY nao configurada no ambiente.'],
         timestamp: new Date().toISOString(),
       });
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
+    // Instancia a conexao SSH JS nativa (funciona na Vercel e Local)
+    const ssh = new NodeSSH();
+    await ssh.connect({
+      host: hostIp,
+      username: 'ubuntu',
+      privateKey: privateKey.replace(/\\n/g, '\n'),
+      readyTimeout: 10000,
+    });
+
+    const result = await ssh.execCommand(`docker logs --tail ${lines} ${container}`);
+    ssh.dispose();
+
+    const rawOutput = result.stdout || result.stderr || '';
+    const logLines = rawOutput
+      .split('\n')
+      .map((l: string) => l.trim())
+      .filter(Boolean);
+
+    return NextResponse.json({
+      process: processName,
+      linesCount: logLines.length,
+      logs: logLines,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error: any) {
-    const isTimeout = error.name === 'AbortError';
     return NextResponse.json({
       process: processName,
       linesCount: 1,
-      logs: [
-        isTimeout
-          ? `⏱️ Timeout na conexao com a Oracle (${processName}). O servidor demorou mais de 6s para responder.`
-          : `⚠️ Erro de conexao com o servidor Oracle (${backendUrl}): ${error.message}`
-      ],
+      logs: [`⚠️ Erro na conexao SSH JS (${processName}): ${error.message}`],
       timestamp: new Date().toISOString(),
     });
   }
