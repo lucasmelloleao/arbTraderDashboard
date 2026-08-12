@@ -40,13 +40,19 @@ export const GET = withAuth(async (req: NextRequest) => {
       });
     }
 
+    // Formata quebras de linha e remove aspas excedentes se a chave veio do .env
+    const formattedPrivateKey = privateKey
+      .trim()
+      .replace(/^"|"$/g, '')
+      .replace(/\\n/g, '\n');
+
     // Instancia a conexao SSH JS nativa via dynamic import em runtime (compativel com Vercel/Turbopack)
     const { NodeSSH } = await import('node-ssh');
     const ssh = new NodeSSH();
     await ssh.connect({
       host: hostIp,
       username: 'ubuntu',
-      privateKey: privateKey.replace(/\\n/g, '\n'),
+      privateKey: formattedPrivateKey,
       readyTimeout: 15000,
     });
 
