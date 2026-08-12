@@ -46,7 +46,11 @@ export default function RobotLogsPage() {
       }
 
       const data: LogResponse = await res.json();
-      setLogs(data.logs || []);
+      // Sanitiza códigos de escape ANSI de cores (ex: [32m, [0m)
+      const cleanLogs = (data.logs || []).map((line: string) => 
+        line.replace(/\x1B\[[0-9;]*[mK]/g, '')
+      );
+      setLogs(cleanLogs);
       setLastUpdate(new Date().toLocaleTimeString());
     } catch (err: any) {
       setErrorMsg(err.message || 'Falha ao buscar logs do servidor');
