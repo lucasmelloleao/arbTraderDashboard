@@ -24,8 +24,11 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
       return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
     }
 
-    // Valida o código
-    if (!user.resetPasswordCode || user.resetPasswordCode !== code.trim()) {
+    // Valida o código (converte ambos para String para evitar incompatibilidade de tipo)
+    const savedCode = String(user.resetPasswordCode || '').trim();
+    const inputCode = String(code || '').trim();
+
+    if (!user.resetPasswordCode || savedCode !== inputCode) {
       return NextResponse.json({ error: 'Código de verificação incorreto ou inválido' }, { status: 400 });
     }
 
