@@ -8,10 +8,84 @@ import { QRCodeSVG } from 'qrcode.react';
 export default function ProfilePage() {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  // Reset via email code states
+  const [resetStep, setResetStep] = useState<'normal' | 'code_sent'>('normal');
+  const [resetCode, setResetCode] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+
+  const handleSendResetCode = async () => {
+    setCodeLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(data.message || 'Código de 6 dígitos enviado para o seu e-mail!');
+        setResetStep('code_sent');
+      } else {
+        setError(data.error || 'Falha ao enviar código por e-mail');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro inesperado ao solicitar código');
+    } finally {
+      setCodeLoading(false);
+    }
+  };
+
+  const handleResetWithCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage('');
+    setError('');
+
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError('New password must be at least 6 characters long');
+      return;
+    }
+
+    if (resetCode.length !== 6) {
+      setError('Informe o código de 6 dígitos enviado por e-mail');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ code: resetCode, newPassword })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setMessage('Senha alterada com sucesso via código de e-mail!');
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setResetCode('');
+        setResetStep('normal');
+      } else {
+        setError(data.error || 'Falha ao redefinir a senha');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro inesperado ao alterar senha');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 2FA states
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -184,21 +258,58 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Current Password</label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="password"
-                  required
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-shadow"
-                  placeholder="Enter current password"
-                />
+          <form onSubmit={resetStep === 'code_sent' ? handleResetWithCode : handleChangePassword} className="space-y-4">
+            {resetStep === 'normal' ? (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-slate-400">Current Password</label>
+                  <button
+                    type="button"
+                    onClick={handleSendResetCode}
+                    disabled={codeLoading}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 underline font-medium"
+                  >
+                    {codeLoading ? "Enviando e-mail..." : "Não lembra a senha? Enviar código por e-mail"}
+                  </button>
+                </div>
+                <div className="relative">
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="password"
+                    required
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-shadow"
+                    placeholder="Enter current password"
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-slate-400">Código de Verificação (6 dígitos enviado por e-mail)</label>
+                  <button
+                    type="button"
+                    onClick={() => setResetStep('normal')}
+                    className="text-xs text-slate-400 hover:text-white underline"
+                  >
+                    Voltar ao modo padrão
+                  </button>
+                </div>
+                <div className="relative">
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={resetCode}
+                    onChange={(e) => setResetCode(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-shadow font-mono tracking-widest text-center"
+                    placeholder="000000"
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">New Password</label>
@@ -239,7 +350,7 @@ export default function ProfilePage() {
                   loading && "opacity-70 cursor-not-allowed"
                 )}
               >
-                {loading ? "Updating..." : "Update Password"}
+                {loading ? "Updating..." : resetStep === 'code_sent' ? "Redefinir Senha com Código" : "Update Password"}
               </button>
             </div>
           </form>
