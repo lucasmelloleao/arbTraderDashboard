@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
-import { NodeSSH } from 'node-ssh';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +40,8 @@ export const GET = withAuth(async (req: NextRequest) => {
       });
     }
 
-    // Instancia a conexao SSH JS nativa (funciona na Vercel e Local)
+    // Instancia a conexao SSH JS nativa via dynamic import em runtime (compativel com Vercel/Turbopack)
+    const { NodeSSH } = await import('node-ssh');
     const ssh = new NodeSSH();
     await ssh.connect({
       host: hostIp,
