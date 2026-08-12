@@ -14,31 +14,21 @@ export const GET = withAuth(async (req: NextRequest) => {
     const defaultHost = isServer1 ? 'http://147.15.122.245:4001' : 'http://163.176.2.243:4001';
     const backendUrl = process.env.API_SERVER_URL || defaultHost;
 
-    // Se estiver rodando localmente E tiver chave SSH configurada
-    if (process.env.SSH_KEY_PATH) {
-      const { exec } = require('child_process');
-      const util = require('util');
-      const execPromise = util.promisify(exec);
-      const host = isServer1 ? 'ubuntu@147.15.122.245' : 'ubuntu@163.176.2.243';
-      const container = isServer1 ? 'liquidation' : 'bots';
-      const cmd = `ssh -i "${process.env.SSH_KEY_PATH}" -o StrictHostKeyChecking=no ${host} "docker logs --tail ${lines} ${container}"`;
-      const { stdout, stderr } = await execPromise(cmd, { timeout: 10000 });
-      const rawOutput = stdout || stderr || '';
-      const logLines = rawOutput.split('\n').map((l: string) => l.trim()).filter(Boolean);
-      return NextResponse.json({ process: processName, linesCount: logLines.length, logs: logLines, timestamp: new Date().toISOString() });
-    }
+    // Conexao HTTP direta para o servidor Oracle (funciona 100% na Vercel sem precisar de SSH ou Linux binarios)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-    // Modo Vercel / Produção: Comunicação HTTP nativa com a API do servidor Oracle
     const res = await fetch(`${backendUrl}/api/logs?process=${processName}&lines=${lines}`, {
       headers: { 'Content-Type': 'application/json' },
       cache: 'no-store',
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!res.ok) {
       return NextResponse.json({
         process: processName,
         linesCount: 1,
-        logs: [`⚠️ Falha ao consultar API do Servidor Oracle (${res.status})`],
+        logs: [`⚠️ Servidor Oracle retornou status ${res.status}. Verifique se o docker container está rodando.`],
         timestamp: new Date().toISOString(),
       });
     }
@@ -46,10 +36,15 @@ export const GET = withAuth(async (req: NextRequest) => {
     const data = await res.json();
     return NextResponse.json(data);
   } catch (error: any) {
+    const isTimeout = error.name === 'AbortError';
     return NextResponse.json({
       process: processName,
       linesCount: 1,
-      logs: [`⚠️ Erro ao consultar logs do servidor Oracle: ${error.message}`],
+      logs: [
+        isTimeout
+          ? `⏱️ Timeout na conexao com a Oracle (${processName}). O servidor demorou mais de 6s para responder.`
+          : `⚠️ Erro de conexao com o servidor Oracle (${backendUrl}): ${error.message}`
+      ],
       timestamp: new Date().toISOString(),
     });
   }
