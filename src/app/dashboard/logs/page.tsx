@@ -30,6 +30,7 @@ export default function RobotLogsPage() {
   const logsEndRef = useRef<HTMLDivElement | null>(null);
 
   const fetchLogs = async () => {
+    if (loading) return; // Evita empilhar requisições se a anterior ainda estiver respondendo
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -60,9 +61,11 @@ export default function RobotLogsPage() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const interval = setInterval(fetchLogs, 4000);
+    const interval = setInterval(() => {
+      fetchLogs();
+    }, 7000); // 7 segundos de intervalo seguro para conexões SSH/HTTP da Oracle
     return () => clearInterval(interval);
-  }, [autoRefresh, selectedBot, lines]);
+  }, [autoRefresh, selectedBot, lines, loading]);
 
   useEffect(() => {
     if (logsEndRef.current && autoRefresh) {
