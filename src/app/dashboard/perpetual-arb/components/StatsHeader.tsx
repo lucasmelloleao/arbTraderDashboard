@@ -133,7 +133,13 @@ export function StatsHeader({
       {/* Linha 1: Saldos em Corretora — um QUADRO por exchange quando há exchanges ativas */}
       <div className="space-y-4">
         {hasBreakdown ? (
-          exchanges!.map((ex, idx) => {
+          exchanges!.filter((ex) => {
+            const sUsdt = Number(ex.spotUsdt || 0);
+            const sUsdc = Number(ex.spotUsdc || 0);
+            const fUsdt = Number(ex.futuresUsdt || 0);
+            const fUsdc = Number(ex.futuresUsdc || 0);
+            return (sUsdt + sUsdc + fUsdt + fUsdc) > 0;
+          }).map((ex, idx) => {
             const label = exchangeLabel(ex);
             const sUsdt = Number(ex.spotUsdt || 0);
             const sUsdc = Number(ex.spotUsdc || 0);
@@ -160,10 +166,12 @@ export function StatsHeader({
             );
           })
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {renderSpotCard('CEX', spotUsdt, spotUsdc)}
-            {renderFuturesCard('Perpétuo', futuresUsdt, futuresUsdc)}
-          </div>
+          (spotUsdt + spotUsdc + futuresUsdt + futuresUsdc) > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {renderSpotCard('CEX', spotUsdt, spotUsdc)}
+              {renderFuturesCard('Perpétuo', futuresUsdt, futuresUsdc)}
+            </div>
+          )
         )}
       </div>
 

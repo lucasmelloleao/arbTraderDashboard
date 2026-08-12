@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Wallet, Zap, LayoutDashboard, LogOut, History, Activity, TrendingUp, User, Menu, X, CalendarRange } from 'lucide-react';
+import { Wallet, Zap, LayoutDashboard, LogOut, History, Activity, TrendingUp, User, Menu, X, CalendarRange, Terminal, ShieldAlert } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -43,7 +43,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const links = [
     { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
     { href: '/dashboard/perpetual-arb', label: 'Perpetual Arb', icon: TrendingUp },
+    { href: '/dashboard/liquidation', label: 'Liquidação (Aave/Compound)', icon: ShieldAlert },
     { href: '/dashboard/flash-loan', label: 'Flash Loans', icon: Zap },
+    { href: '/dashboard/logs', label: 'Logs dos Robôs', icon: Terminal },
     { href: '/dashboard/exchanges', label: 'Exchanges (CEX/DEX)', icon: Wallet },
     { href: '/dashboard/exchange-history', label: 'Histórico da Exchange', icon: CalendarRange },
   ];
