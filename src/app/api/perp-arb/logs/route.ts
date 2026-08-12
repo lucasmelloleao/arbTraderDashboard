@@ -56,8 +56,8 @@ export const GET = withAuth(async (req: NextRequest) => {
       readyTimeout: 15000,
     });
 
-    // Captura os logs diretamente do container Docker (garante 100% de retorno de saida)
-    const result = await ssh.execCommand(`docker logs --tail ${lines} ${container}`);
+    // Captura os logs filtrando pelo processo especifico do PM2 dentro do container
+    const result = await ssh.execCommand(`docker exec ${container} pm2 logs ${processName} --lines ${lines} --nostream --raw`);
     ssh.dispose();
 
     const rawOutput = result.stdout || result.stderr || '';

@@ -8,16 +8,24 @@ export const dynamic = 'force-dynamic';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export const POST = withAuth(async (req: NextRequest, userId: string) => {
+export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
+    const { email } = await req.json();
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    if (!email) {
+      return NextResponse.json({ error: 'E-mail é obrigatório' }, { status: 400 });
     }
 
-    // Gera um código numérico aleatório de 6 dígitos (ex: 492815)
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      // Por segurança, retorna mensagem genérica ou sucesso sem expor se o e-mail existe
+      return NextResponse.json({
+        message: 'Se o e-mail estiver cadastrado, você receberá o código de verificação.',
+      });
+    }
+
+    // Gera um código numérico aleatório de 6 dígitos
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Válido por 15 minutos
 
@@ -45,14 +53,12 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
       });
     } catch (emailErr: any) {
       console.error('❌ Falha ao enviar e-mail via Resend:', emailErr.message);
-      // Se falhar o envio real (ex: domínio não verificado no plano grátis do Resend), retorna o aviso
     }
 
     return NextResponse.json({
-      message: `Código enviado com sucesso para ${user.email}`,
-      email: user.email,
+      message: 'Se o e-mail estiver cadastrado, você receberá o código de verificação.',
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Erro ao gerar código de verificação' }, { status: 500 });
   }
-});
+}

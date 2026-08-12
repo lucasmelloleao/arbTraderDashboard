@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
-import { withAuth } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
+import { sendPasswordChangedNotificationEmail } from '@/lib/emailNotifications';
 
 export const dynamic = 'force-dynamic';
 
-export const POST = withAuth(async (req: NextRequest, userId: string) => {
+export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
-    const { code, newPassword } = await req.json();
+    const { email, code, newPassword } = await req.json();
+
+    if (!email) {
+      return NextResponse.json({ error: 'E-mail é obrigatório' }, { status: 400 });
+    }
 
     if (!code || typeof code !== 'string' || code.trim().length !== 6) {
       return NextResponse.json({ error: 'O código de verificação deve ter 6 dígitos' }, { status: 400 });
@@ -19,7 +23,7 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
       return NextResponse.json({ error: 'A nova senha deve ter pelo menos 6 caracteres' }, { status: 400 });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
     }
@@ -44,8 +48,11 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
     user.resetPasswordExpires = undefined;
     await user.save();
 
+    // Dispara notificação de alteração por e-mail
+    sendPasswordChangedNotificationEmail(user.email, user.name);
+
     return NextResponse.json({ message: 'Senha alterada com sucesso!' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Erro ao redefinir a senha' }, { status: 500 });
   }
-});
+}

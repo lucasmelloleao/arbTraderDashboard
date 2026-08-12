@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
 import { signToken } from '@/lib/auth';
+import { sendLoginNotificationEmail } from '@/lib/emailNotifications';
 
 export async function POST(request: Request) {
   try {
@@ -46,6 +47,9 @@ export async function POST(request: Request) {
     }
 
     const token = signToken(user._id.toString());
+
+    // Dispara notificação por e-mail sem travar o response
+    sendLoginNotificationEmail(user.email, user.name);
 
     return NextResponse.json({ token, user: { id: user._id, name: user.name, email: user.email } });
   } catch (error: any) {
