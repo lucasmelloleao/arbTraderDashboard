@@ -47,7 +47,7 @@ export const GET = withAuth(async (req: NextRequest) => {
       host: hostIp,
       username: 'ubuntu',
       privateKey: privateKey.replace(/\\n/g, '\n'),
-      readyTimeout: 10000,
+      readyTimeout: 15000,
     });
 
     const result = await ssh.execCommand(`docker logs --tail ${lines} ${container}`);
