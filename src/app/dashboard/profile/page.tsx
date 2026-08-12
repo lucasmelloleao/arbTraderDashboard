@@ -8,6 +8,11 @@ import { QRCodeSVG } from 'qrcode.react';
 export default function ProfilePage() {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
   // Reset via email code states
   const [resetStep, setResetStep] = useState<'normal' | 'code_sent'>('normal');
   const [resetCode, setResetCode] = useState('');
