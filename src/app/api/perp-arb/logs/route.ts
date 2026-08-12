@@ -64,7 +64,8 @@ export const GET = withAuth(async (req: NextRequest) => {
     const logLines = rawOutput
       .split('\n')
       .map((l: string) => l.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((l: string) => !l.startsWith('[TAILING]'));
 
     return NextResponse.json({
       process: processName,
