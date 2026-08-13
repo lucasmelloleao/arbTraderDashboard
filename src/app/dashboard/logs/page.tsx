@@ -95,6 +95,50 @@ export default function RobotLogsPage() {
 
   const activeBot = BOTS.find((b) => b.id === selectedBot);
 
+  const getLiquidationStats = () => {
+    if (!selectedBot.startsWith('liq-')) return null;
+    
+    let strategiesCount = 0;
+    let debtorsInCache = 0;
+    let candidatesCount = 0;
+    let contractAddress = '';
+
+    for (let i = logs.length - 1; i >= 0; i--) {
+      const line = logs[i];
+      
+      if (line.includes('runScan:') && line.includes('devedor(es) em cache')) {
+        const match = line.match(/runScan:\s*(\d+)\s*estratégia\(s\),\s*(\d+)\s*devedor/i);
+        if (match) {
+          if (!strategiesCount) strategiesCount = parseInt(match[1], 10);
+          if (!debtorsInCache) debtorsInCache = parseInt(match[2], 10);
+        }
+      }
+      
+      if (line.includes('Contrato:') && line.includes('Candidatos:')) {
+        const match = line.match(/Contrato:\s*(0x[a-fA-F0-9]{40})\s*\|\s*Candidatos:\s*(\d+)/i);
+        if (match) {
+          if (!contractAddress) contractAddress = match[1];
+          if (!candidatesCount) candidatesCount = parseInt(match[2], 10);
+        }
+      }
+
+      if (strategiesCount && debtorsInCache && candidatesCount && contractAddress) {
+        break;
+      }
+    }
+
+    if (!strategiesCount && !debtorsInCache && !candidatesCount && !contractAddress) return null;
+
+    return {
+      strategiesCount,
+      debtorsInCache,
+      candidatesCount,
+      contractAddress
+    };
+  };
+
+  const liqStats = getLiquidationStats();
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -168,6 +212,28 @@ export default function RobotLogsPage() {
           );
         })}
       </div>
+
+      {/* Liquidation Statistics Summary Cards */}
+      {liqStats && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Contrato Executor</span>
+            <span className="text-white font-mono text-xs mt-2 break-all">{liqStats.contractAddress}</span>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Estratégias Ativas</span>
+            <span className="text-2xl font-bold text-indigo-400 mt-1">{liqStats.strategiesCount}</span>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Devedores em Cache</span>
+            <span className="text-2xl font-bold text-amber-400 mt-1">{liqStats.debtorsInCache}</span>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Candidatos</span>
+            <span className="text-2xl font-bold text-emerald-400 mt-1">{liqStats.candidatesCount}</span>
+          </div>
+        </div>
+      )}
 
       {/* Console Display */}
       <div className="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
