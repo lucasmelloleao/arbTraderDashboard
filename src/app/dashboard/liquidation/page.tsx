@@ -1,10 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { ExternalLink, Play, Pause, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldAlert, ShieldCheck, RefreshCw, Copy, ExternalLink, Play, Pause, Settings, Layers } from 'lucide-react';
 
-type LiquidationStrategy = {
+interface Candidate {
+  _id: string;
+  network: string;
+  user: string;
+  healthFactor: number;
+  totalCollateralUSD: number;
+  totalDebtUSD: number;
+  updatedAt: string;
+}
+
+interface LiquidationStrategy {
   _id: string;
   name: string;
   network: string;
@@ -15,35 +24,71 @@ type LiquidationStrategy = {
   lastStatusMessage: string;
   lastRunAt: string | null;
   createdAt: string;
-};
+}
+
+const NETWORKS = [
+  { id: 'all', name: 'Todas as Redes' },
+  { id: 'arbitrum', name: 'Arbitrum', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  { id: 'polygon', name: 'Polygon', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+  { id: 'base', name: 'Base', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
+  { id: 'optimism', name: 'Optimism', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+  { id: 'avalanche', name: 'Avalanche', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
+];
 
 export default function LiquidationPage() {
+  const [activeTab, setActiveTab] = useState<'monitor' | 'strategies'>('monitor');
+  
+  // Candidates State
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [selectedNetwork, setSelectedNetwork] = useState('all');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Strategies State
   const [strategies, setStrategies] = useState<LiquidationStrategy[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingStrategies, setLoadingStrategies] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const fetchCandidates = async () => {
+    setLoadingCandidates(true);
+    try {
+      const token = localStorage.getItem('token');
+      const networkParam = selectedNetwork !== 'all' ? `?network=${selectedNetwork}` : '';
+      const res = await fetch(`/api/liquidation/candidates${networkParam}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setCandidates(await res.json());
+      }
+    } catch (err) {
+      console.error('Erro ao buscar candidatos:', err);
+    } finally {
+      setLoadingCandidates(false);
+    }
+  };
 
   const fetchStrategies = async () => {
-    setLoading(true);
+    setLoadingStrategies(true);
+    setErrorMsg(null);
     try {
       const res = await fetch('/api/liquidation', {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) setStrategies(await res.json());
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setErrorMsg(e.message || 'Falha ao buscar estratégias');
     } finally {
-      setLoading(false);
+      setLoadingStrategies(false);
     }
   };
 
   const toggleExecution = async (id: string, current: boolean) => {
     setToggling(id);
-    setError(null);
+    setErrorMsg(null);
     try {
-      const url = `/api/liquidation/${id}/toggle`;
-      console.log('[LIQ UI] toggle', url, 'current=', current);
-      const res = await fetch(url, {
+      const res = await fetch(`/api/liquidation/${id}/toggle`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -51,106 +96,340 @@ export default function LiquidationPage() {
         },
         body: JSON.stringify({ executionEnabled: !current })
       });
-      console.log('[LIQ UI] status', res.status);
       const data = await res.json().catch(() => ({}));
-      console.log('[LIQ UI] body', data);
       if (!res.ok) {
-        setError(data?.error || `Falha ao atualizar (status ${res.status})`);
+        setErrorMsg(data?.error || `Falha ao atualizar (status ${res.status})`);
       } else {
         setStrategies(prev => prev.map(s => s._id === id ? { ...s, executionEnabled: !current, lastStatusMessage: !current ? 'enabled' : 'disabled' } : s));
       }
     } catch (e: any) {
-      console.error('[LIQ UI] toggle error', e);
-      setError(e?.message || 'Erro de conexão');
+      console.error(e);
+      setErrorMsg(e?.message || 'Erro de conexão');
     } finally {
       setToggling(null);
     }
   };
 
-  useEffect(() => { fetchStrategies(); }, []);
+  useEffect(() => {
+    fetchCandidates();
+  }, [selectedNetwork]);
 
-  const contractArbitrum = process.env.NEXT_PUBLIC_LIQUIDATION_CONTRACT_ARBITRUM;
-  const activeCount = strategies.filter((s) => s.executionEnabled).length;
+  useEffect(() => {
+    fetchStrategies();
+  }, []);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const stats = React.useMemo(() => {
+    const total = candidates.length;
+    const underOne = candidates.filter(c => c.healthFactor < 1.0).length;
+    const totalCollateral = candidates.reduce((acc, c) => acc + c.totalCollateralUSD, 0);
+    const totalDebt = candidates.reduce((acc, c) => acc + c.totalDebtUSD, 0);
+    const lowestHF = total > 0 ? Math.min(...candidates.map(c => c.healthFactor)) : 0;
+
+    return { total, underOne, totalCollateral, totalDebt, lowestHF };
+  }, [candidates]);
+
+  const getExplorerLink = (network: string, address: string) => {
+    switch (network) {
+      case 'arbitrum': return `https://arbiscan.io/address/${address}`;
+      case 'polygon': return `https://polygonscan.com/address/${address}`;
+      case 'base': return `https://basescan.org/address/${address}`;
+      case 'optimism': return `https://optimistic.etherscan.io/address/${address}`;
+      case 'avalanche': return `https://snowtrace.io/address/${address}`;
+      default: return '#';
+    }
+  };
+
+  const activeStrategiesCount = strategies.filter(s => s.executionEnabled).length;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Liquidações Aave V3 — Arbitrum</h1>
-            <p className="text-gray-400 text-sm">
-              Contrato:{' '}
-              {contractArbitrum ? (
-                <a href={`https://arbiscan.io/address/${contractArbitrum}`} target="_blank" className="underline">
-                  {contractArbitrum}
-                </a>
-              ) : (
-                '—'
-              )}
-            </p>
-            <p className="text-gray-500 text-xs mt-1">O robô roda em background 24/7. Aqui você liga/desliga apenas a execução real.</p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={fetchStrategies} className="px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" /> Atualizar
-            </button>
-            <Link href="/dashboard" className="px-3 py-2 rounded bg-gray-800 hover:bg-gray-700">Voltar</Link>
+    <div className="p-6 space-y-6 max-w-7xl mx-auto text-slate-100">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <ShieldAlert className="w-7 h-7 text-amber-500 animate-pulse" />
+            Liquidações Aave V3 (Multi-chain)
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Gerencie robôs de liquidação e monitore posições devedoras próximas ao limite em tempo real.
+          </p>
+        </div>
+
+        <button
+          onClick={activeTab === 'monitor' ? fetchCandidates : fetchStrategies}
+          disabled={loadingCandidates || loadingStrategies}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold transition disabled:opacity-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${(loadingCandidates || loadingStrategies) ? 'animate-spin' : ''}`} />
+          Atualizar Dados
+        </button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+          <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Devedores em Cache</div>
+          <div className="text-2xl font-bold text-white mt-2 flex items-baseline gap-2">
+            {stats.total}
+            <span className="text-xs font-normal text-slate-500">varrendo</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-gray-900 border border-gray-800 rounded p-4">
-            <div className="text-gray-400 text-sm">Estratégias</div>
-            <div className="text-2xl font-bold">{strategies.length}</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded p-4">
-            <div className="text-gray-400 text-sm">Executando</div>
-            <div className={`text-2xl font-bold ${activeCount ? 'text-emerald-400' : ''}`}>{activeCount}</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded p-4">
-            <div className="text-gray-400 text-sm">Status</div>
-            <div className="text-2xl font-bold">{strategies[0]?.lastStatusMessage || 'idle'}</div>
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+          <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Liquidáveis (HF &lt; 1.0)</div>
+          <div className="text-2xl font-bold text-rose-500 mt-2 flex items-baseline gap-2">
+            {stats.underOne}
+            {stats.underOne > 0 && <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping inline-block" />}
           </div>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded divide-y divide-gray-800">
-          {loading && <div className="p-4 text-gray-400">Carregando...</div>}
-          {!loading && strategies.length === 0 && <div className="p-4 text-gray-400">Nenhuma estratégia.</div>}
-          {error && (
-            <div className="p-3 text-red-400 text-sm border-b border-gray-800">
-              Erro: {error}
-            </div>
-          )}
-          {strategies.map(s => (
-            <div key={s._id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <div className="font-semibold">{s.name}</div>
-                <div className="text-sm text-gray-400">Rede: {s.network}</div>
-                <div className="text-xs text-gray-500 break-all">Contrato: {s.contractAddress}</div>
-                <div className="text-xs text-gray-500">Atualizado: {s.lastRunAt ? new Date(s.lastRunAt).toLocaleString() : '—'} • Status: {s.lastStatusMessage || '—'}</div>
-              </div>
-              <div className="flex items-center gap-3">
-                <a href={`https://arbiscan.io/address/${s.contractAddress}`} target="_blank" className="text-gray-300 hover:text-white">
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-                <button
-                  onClick={() => toggleExecution(s._id, s.executionEnabled)}
-                  disabled={toggling === s._id}
-                  className={`px-3 py-2 rounded flex items-center gap-2 ${s.executionEnabled ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-gray-800 hover:bg-gray-700'}`}
-                >
-                  {toggling === s._id ? (
-                    <span className="animate-pulse">...</span>
-                  ) : s.executionEnabled ? (
-                    <><Pause className="w-4 h-4" /> Pausar</>
-                  ) : (
-                    <><Play className="w-4 h-4" /> Ativar</>
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+          <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Menor Health Factor</div>
+          <div className={`text-2xl font-bold mt-2 ${stats.lowestHF < 1.0 ? 'text-rose-500' : 'text-amber-400'}`}>
+            {stats.lowestHF > 0 ? stats.lowestHF.toFixed(4) : 'N/A'}
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+          <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Robôs em Execução</div>
+          <div className="text-2xl font-bold text-emerald-400 mt-2">
+            {activeStrategiesCount} / {strategies.length}
+          </div>
         </div>
       </div>
+
+      {/* Tabs Switcher */}
+      <div className="flex border-b border-slate-800">
+        <button
+          onClick={() => setActiveTab('monitor')}
+          className={`px-6 py-3 text-sm font-semibold border-b-2 transition flex items-center gap-2 ${
+            activeTab === 'monitor'
+              ? 'border-indigo-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Monitor de Devedores
+        </button>
+        <button
+          onClick={() => setActiveTab('strategies')}
+          className={`px-6 py-3 text-sm font-semibold border-b-2 transition flex items-center gap-2 ${
+            activeTab === 'strategies'
+              ? 'border-indigo-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          Configurações de Robôs
+        </button>
+      </div>
+
+      {/* Tab Contents */}
+      {activeTab === 'monitor' ? (
+        <div className="space-y-6">
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            {NETWORKS.map((net) => {
+              const isSelected = selectedNetwork === net.id;
+              return (
+                <button
+                  key={net.id}
+                  onClick={() => setSelectedNetwork(net.id)}
+                  className={`px-4 py-1.5 rounded-xl border text-sm font-semibold transition ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/10'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  {net.name}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-950 border-b border-slate-800 text-xs font-semibold uppercase text-slate-400">
+                    <th className="px-6 py-4">Rede</th>
+                    <th className="px-6 py-4">Devedor</th>
+                    <th className="px-6 py-4">Health Factor</th>
+                    <th className="px-6 py-4 text-right">Colateral USD</th>
+                    <th className="px-6 py-4 text-right">Dívida USD</th>
+                    <th className="px-6 py-4 text-center">Última Variação</th>
+                    <th className="px-6 py-4 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-sm text-slate-300">
+                  {loadingCandidates ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500 italic">
+                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
+                        Buscando candidatos ativos no banco de dados...
+                      </td>
+                    </tr>
+                  ) : candidates.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500 italic">
+                        Nenhuma posição devedora (HF &lt; 1.5) monitorada atualmente nesta rede.
+                      </td>
+                    </tr>
+                  ) : (
+                    candidates.map((c) => {
+                      const netObj = NETWORKS.find(n => n.id === c.network);
+                      const isRisky = c.healthFactor < 1.0;
+                      const isClose = c.healthFactor >= 1.0 && c.healthFactor < 1.1;
+
+                      return (
+                        <tr key={c._id} className="hover:bg-slate-800/20 transition">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2.5 py-0.5 rounded-full border text-xs font-semibold ${netObj?.color || 'bg-slate-800 text-slate-400'}`}>
+                              {c.network.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-mono whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-200">{c.user.slice(0, 8)}...{c.user.slice(-6)}</span>
+                              <button
+                                onClick={() => copyToClipboard(c.user, c._id)}
+                                className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-slate-300 transition"
+                                title="Copiar endereço completo"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                              {copiedId === c._id && <span className="text-xs text-emerald-400 font-sans">Copiado!</span>}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {isRisky ? (
+                                <ShieldAlert className="w-4 h-4 text-rose-500 animate-pulse" />
+                              ) : isClose ? (
+                                <ShieldAlert className="w-4 h-4 text-amber-500" />
+                              ) : (
+                                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                              )}
+                              <span className={`font-bold ${isRisky ? 'text-rose-500' : isClose ? 'text-amber-400' : 'text-slate-300'}`}>
+                                {c.healthFactor.toFixed(6)}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right whitespace-nowrap font-semibold text-slate-200">
+                            ${c.totalCollateralUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-6 py-4 text-right whitespace-nowrap font-semibold text-indigo-400">
+                            ${c.totalDebtUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-6 py-4 text-center whitespace-nowrap text-xs text-slate-500">
+                            {new Date(c.updatedAt).toLocaleTimeString()}
+                          </td>
+                          <td className="px-6 py-4 text-center whitespace-nowrap">
+                            <a
+                              href={getExplorerLink(c.network, c.user)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                            >
+                              Explorer
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            {errorMsg && (
+              <div className="p-4 bg-rose-500/10 border-b border-slate-850 text-rose-400 text-sm">
+                ⚠️ Erro: {errorMsg}
+              </div>
+            )}
+
+            <div className="divide-y divide-slate-800">
+              {loadingStrategies ? (
+                <div className="p-8 text-center text-slate-500 italic">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
+                  Buscando estratégias de liquidação no banco de dados...
+                </div>
+              ) : strategies.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 italic">
+                  Nenhuma estratégia de liquidação cadastrada no banco de dados.
+                </div>
+              ) : (
+                strategies.map((s) => {
+                  const netObj = NETWORKS.find(n => n.id === s.network);
+                  return (
+                    <div key={s._id} className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-800/10 transition">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-white text-base">{s.name}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full border text-xs font-semibold ${netObj?.color || 'bg-slate-800 text-slate-400'}`}>
+                            {s.network.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="text-xs font-mono text-slate-500 break-all">
+                          Contrato Executor: {s.contractAddress || '—'}
+                        </div>
+                        <div className="text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
+                          <span>Bloco Sincronizado: <strong className="text-slate-300">{s.lastScannedBlock || 0}</strong></span>
+                          <span>Cache de Devedores: <strong className="text-slate-300">{s.userPositionsCount || 0}</strong></span>
+                          {s.lastRunAt && <span>Atualizado: <strong className="text-slate-300">{new Date(s.lastRunAt).toLocaleString()}</strong></span>}
+                          <span>Status do Robô: <strong className="text-slate-300">{s.lastStatusMessage || 'idle'}</strong></span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 self-start md:self-auto">
+                        <a
+                          href={getExplorerLink(s.network, s.contractAddress)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition"
+                          title="Ver contrato no explorador de blocos"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                        
+                        <button
+                          onClick={() => toggleExecution(s._id, s.executionEnabled)}
+                          disabled={toggling === s._id}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition disabled:opacity-50 ${
+                            s.executionEnabled 
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25' 
+                              : 'bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700'
+                          }`}
+                        >
+                          {toggling === s._id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : s.executionEnabled ? (
+                            <><Pause className="w-4 h-4" /> Pausar Robô</>
+                          ) : (
+                            <><Play className="w-4 h-4" /> Ativar Robô</>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
