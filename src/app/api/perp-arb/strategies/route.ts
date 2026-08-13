@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import PerpArbStrategy from '@/models/PerpArbStrategy';
 import ExchangeKey from '@/models/ExchangeKey';
+import PerpArbSettings from '@/models/PerpArbSettings';
 import { withAuth } from '@/lib/auth';
 import redis from '@/lib/redis';
 
@@ -12,6 +13,7 @@ export const GET = withAuth(async (_req: NextRequest, userId: string) => {
   try {
     await connectToDatabase();
     ExchangeKey.init(); // ensure model is registered for populate
+    PerpArbSettings.init(); // ensure model is registered for populate
     const strategies = await PerpArbStrategy.find({ userId })
       .populate('perpExchangeKeyId', 'name exchangeId')
       .populate('spotExchangeKeyId', 'name exchangeId')

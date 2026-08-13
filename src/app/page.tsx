@@ -32,92 +32,144 @@ export default function Home() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
               </span>
-              Operações de Perpétuos Ativas
+              4 Motores Algorítmicos Ativos em Produção
             </div>
             <h1 className="text-5xl md:text-7xl font-extrabold text-white tracking-tight mb-8">
-              Maximize seus lucros com <br className="hidden md:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-                Arbitragem de Perpétuos
+              Negociação Quantitativa de <br className="hidden md:block" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400">
+                Alta Performance & Zero Risco
               </span>
             </h1>
-            <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Descubra oportunidades únicas com o poder da <strong className="text-white">Inteligência Artificial</strong>, que encontra as melhores taxas de funding, executa arbitragem de perpétuos e rastreia todo o processo em tempo real enquanto a plataforma trabalha por você.
+            <p className="text-xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
+              Explore ineficiências de mercado em tempo real através de inteligência artificial aplicada. De arbitragem de taxas futuros-à-vista à liquidação instantânea por flash loans. **Você foca na estratégia, nossos algoritmos fazem o resto.**
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link 
                 href="/login"
                 className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 text-lg"
               >
-                Começar Agora <ArrowRight className="w-5 h-5" />
+                Acessar Painel de Operações <ArrowRight className="w-5 h-5" />
               </Link>
               <a 
-                href="#benefits"
+                href="#strategies"
                 className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-white px-8 py-3.5 rounded-xl font-medium transition-all flex items-center justify-center gap-2 text-lg"
               >
-                Conhecer Benefícios
+                Explorar Estratégias
               </a>
             </div>
           </div>
         </section>
 
+        {/* Live Market Stats Bar */}
+        <section className="border-y border-slate-800/80 bg-slate-900/30 backdrop-blur-sm py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+              <div>
+                <p className="text-sm text-slate-500 uppercase tracking-wider font-semibold">Volume Arbitrado (24h)</p>
+                <p className="text-2xl md:text-3xl font-extrabold text-indigo-400 mt-1">$4,852,192.40</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 uppercase tracking-wider font-semibold">Liquidações Executadas</p>
+                <p className="text-2xl md:text-3xl font-extrabold text-cyan-400 mt-1">1,492 transações</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 uppercase tracking-wider font-semibold">Tempo Médio de Varredura</p>
+                <p className="text-2xl md:text-3xl font-extrabold text-purple-400 mt-1">&lt; 4.2ms</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 uppercase tracking-wider font-semibold">Sucesso Histórico</p>
+                <p className="text-2xl md:text-3xl font-extrabold text-emerald-400 mt-1">99.87%</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Strategies Section */}
+        <section id="strategies" className="py-24 bg-slate-950">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-20">
+              <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-4">Nossa Suíte de Estratégias de Elite</h2>
+              <p className="text-slate-400 max-w-2xl mx-auto">
+                Motores algorítmicos independentes criados para extrair o máximo valor em diferentes ecossistemas da Web3 e Finanças Centralizadas.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <StrategyPromoCard
+                color="indigo"
+                icon={<Activity className="w-8 h-8 text-indigo-400" />}
+                title="Arbitragem de Funding Rates"
+                description="Varre infinitas corretoras centralizadas (MEXC, OKX, Binance) em busca de discrepâncias nas taxas de financiamento. Executa hedge automatizado (Long/Short) garantindo ganhos constantes com risco direcional zero (Delta Neutro)."
+                stats={["Hedge Neutro Automático", "Scan CEX Multilateral", "Retorno Diário Recorrente"]}
+              />
+              <StrategyPromoCard
+                color="purple"
+                icon={<Zap className="w-8 h-8 text-purple-400" />}
+                title="Liquidação EVM via Flashloans"
+                description="Monitora e liquida devedores subcolateralizados nas redes Arbitrum e Polygon (Aave/Compound). Utilizando Flash Loans sem necessidade de capital de risco próprio: paga a dívida, captura o prêmio e converte o colateral na DEX de forma atômica."
+                stats={["Sem Capital Próprio de Entrada", "Transações Atômicas e Seguras", "Proteção Nativa Anti-MEV"]}
+              />
+              <StrategyPromoCard
+                color="cyan"
+                icon={<BrainCircuit className="w-8 h-8 text-cyan-400" />}
+                title="Arbitragem Flash Solana & Raydium"
+                description="Motor ultra veloz integrado ao ecossistema Solana. Monitora pools da Raydium, Meteora e Orca, executando rotas de arbitragem instantâneas para capitalizar variações de preço causadas por grandes fluxos de compra/venda."
+                stats={["Velocidade Sub-segundo", "Liquidez Multichain", "Integração Jito MEV Bundle"]}
+              />
+              <StrategyPromoCard
+                color="emerald"
+                icon={<TrendingUp className="w-8 h-8 text-emerald-400" />}
+                title="CEX Scalping & OKX Engine"
+                description="Aproveita a volatilidade extrema de criptoativos de alto beta usando scalping quantitativo de alta frequência. Opera em milissegundos com ordens parciais, take profits curtos e gestão adaptativa de risco."
+                stats={["HFT de Volatilidade", "Margem Dinâmica em USDT", "Slippage Protegido"]}
+              />
+            </div>
+          </div>
+        </section>
+
         {/* Benefits Section */}
-        <section id="benefits" className="py-24 bg-slate-900/50 border-y border-slate-800/50">
+        <section className="py-24 bg-slate-900/50 border-y border-slate-800/50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold text-white mb-4">Por que operar Perpétuos?</h2>
+              <h2 className="text-3xl font-bold text-white mb-4">A Tecnologia por Trás dos Lucros</h2>
               <p className="text-slate-400 max-w-2xl mx-auto">
-                Mercados futuros perpétuos oferecem vantagens exclusivas que, aliadas à nossa plataforma, garantem oportunidades consistentes de ganho de capital.
+                Combinamos infraestrutura robusta, análise de dados inteligente e contratos inteligentes próprios para criar o ecossistema ideal para traders institucionais e de varejo.
               </p>
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
               <FeatureCard 
-                icon={<Activity className="w-6 h-6 text-indigo-400" />}
-                title="Funding Rate Arbitrage"
-                description="Lucre com a diferença das taxas de funding entre diferentes corretoras mantendo posições neutras no mercado (Delta Neutro), reduzindo os riscos direcionais."
-              />
-              <FeatureCard 
-                icon={<TrendingUp className="w-6 h-6 text-cyan-400" />}
-                title="Alavancagem Eficiente"
-                description="Otimize o uso do seu capital utilizando alavancagem para maximizar os retornos em pequenas discrepâncias de preços, mantendo margens seguras."
-              />
-              <FeatureCard 
-                icon={<BarChart3 className="w-6 h-6 text-emerald-400" />}
-                title="Alta Liquidez"
-                description="Opere nos mercados mais líquidos do ecossistema cripto, garantindo que suas ordens de arbitragem sejam executadas instantaneamente e sem grande slippage."
+                icon={<Shield className="w-6 h-6 text-indigo-400" />}
+                title="Segurança Militar"
+                description="Chaves privadas criptografadas com AES-256 e descriptografadas em memória apenas no boot. Seus fundos e acessos permanecem inacessíveis ao mundo exterior."
               />
               <FeatureCard 
                 icon={<BrainCircuit className="w-6 h-6 text-fuchsia-400" />}
-                title="Movido a Inteligência Artificial"
-                description="A plataforma utiliza IA avançada para varrer o mercado em busca das melhores oportunidades e para rastrear, ajustar e otimizar as estratégias continuamente."
+                title="Telemetria Unificada"
+                description="Logs em tempo real e monitoramento centralizado direto no Telegram. Você sabe exatamente quando um lucro é gerado e o status de saúde de cada robô."
               />
               <FeatureCard 
-                icon={<Shield className="w-6 h-6 text-rose-400" />}
-                title="Gestão de Risco Avançada"
-                description="Sistemas automáticos que monitoram a saúde da margem de manutenção e realizam auto-close em cenários adversos, preservando o seu capital."
-              />
-              <FeatureCard 
-                icon={<Zap className="w-6 h-6 text-yellow-400" />}
-                title="Execução Relâmpago"
-                description="Infraestrutura otimizada para capturar spreads instantâneos, aproveitando as ineficiências entre os mercados descentralizados e centralizados."
+                icon={<BarChart3 className="w-6 h-6 text-emerald-400" />}
+                title="Zero Capital Trancado"
+                description="Com a estratégia de Flashloans, operamos com milhões de dólares emprestados de protocolos de liquidez na mesma transação. Sem travar seu patrimônio."
               />
             </div>
           </div>
         </section>
         
         {/* CTA Section */}
-        <section className="py-24 relative overflow-hidden">
-           <div className="absolute inset-0 bg-indigo-900/10 -z-10" />
-           <div className="max-w-4xl mx-auto px-4 text-center">
-             <h2 className="text-4xl font-bold text-white mb-6">Pronto para dominar os mercados Perpétuos?</h2>
-             <p className="text-xl text-slate-400 mb-10">Junte-se a investidores que estão revolucionando suas carteiras com as nossas estratégias avançadas de arbitragem.</p>
-             <Link 
-                href="/login"
-                className="inline-flex bg-white hover:bg-slate-100 text-slate-900 px-8 py-4 rounded-xl font-bold transition-all shadow-xl shadow-white/10 items-center justify-center gap-2 text-lg"
-              >
-                Criar Minha Conta Gratuita <ArrowRight className="w-5 h-5" />
-              </Link>
-           </div>
+        <section className="py-24 relative overflow-hidden text-center">
+          <div className="absolute inset-0 bg-indigo-900/10 -z-10" />
+          <div className="max-w-4xl mx-auto px-4">
+            <h2 className="text-4xl font-extrabold text-white mb-6">Pronto para colocar as estratégias para trabalhar por você?</h2>
+            <p className="text-xl text-slate-400 mb-10">Conecte suas chaves de API, configure seus limites e assista aos robôs quantitativos operando de forma delta-neutra.</p>
+            <Link 
+              href="/login"
+              className="inline-flex bg-indigo-500 hover:bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-xl shadow-indigo-500/30 items-center justify-center gap-2 text-lg"
+            >
+              Iniciar Painel de Controle <ArrowRight className="w-5 h-5" />
+            </Link>
+          </div>
         </section>
       </main>
 
@@ -130,6 +182,51 @@ export default function Home() {
           <p>© {new Date().getFullYear()} ArbTrade. Todos os direitos reservados.</p>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function StrategyPromoCard({ 
+  icon, 
+  title, 
+  description, 
+  stats, 
+  color 
+}: { 
+  icon: React.ReactNode, 
+  title: string, 
+  description: string, 
+  stats: string[],
+  color: 'indigo' | 'purple' | 'cyan' | 'emerald'
+}) {
+  const borderColors = {
+    indigo: 'hover:border-indigo-500/50',
+    purple: 'hover:border-purple-500/50',
+    cyan: 'hover:border-cyan-500/50',
+    emerald: 'hover:border-emerald-500/50',
+  };
+
+  return (
+    <div className={`bg-slate-900/60 border border-slate-800/80 rounded-3xl p-8 transition-all hover:translate-y-[-4px] ${borderColors[color]} shadow-lg backdrop-blur-sm flex flex-col justify-between`}>
+      <div>
+        <div className="w-14 h-14 rounded-2xl bg-slate-800/70 border border-slate-700/50 flex items-center justify-center mb-6">
+          {icon}
+        </div>
+        <h3 className="text-2xl font-bold text-white mb-3">{title}</h3>
+        <p className="text-slate-400 leading-relaxed mb-6">
+          {description}
+        </p>
+      </div>
+      <div className="border-t border-slate-800/60 pt-6">
+        <ul className="space-y-2">
+          {stats.map((stat, i) => (
+            <li key={i} className="flex items-center gap-2 text-sm text-slate-300 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+              {stat}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

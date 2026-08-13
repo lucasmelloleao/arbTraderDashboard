@@ -10,9 +10,8 @@ export const GET = withAuth(async (req: NextRequest) => {
     processName = searchParams.get('process') || 'scanner';
     const lines = searchParams.get('lines') || '150';
 
-    const isServer1 = processName.startsWith('liq-');
-    const hostIp = isServer1 ? '147.15.122.245' : '163.176.2.243';
-    const container = isServer1 ? 'liquidation' : 'bots';
+    const hostIp = '178.104.51.125';
+    const container = 'bots';
 
     // Obtem o conteudo da chave SSH via variavel de ambiente ou arquivo local
     let privateKey = process.env.SSH_PRIVATE_KEY;
@@ -49,12 +48,20 @@ export const GET = withAuth(async (req: NextRequest) => {
     // Instancia a conexao SSH JS nativa via dynamic import em runtime (compativel com Vercel/Turbopack)
     const { NodeSSH } = await import('node-ssh');
     const ssh = new NodeSSH();
-    await ssh.connect({
+
+    const sshConfig: any = {
       host: hostIp,
-      username: 'ubuntu',
-      privateKey: formattedPrivateKey,
+      username: 'root',
       readyTimeout: 15000,
-    });
+    };
+
+    if (process.env.SSH_PASSWORD) {
+      sshConfig.password = process.env.SSH_PASSWORD;
+    } else {
+      sshConfig.privateKey = formattedPrivateKey;
+    }
+
+    await ssh.connect(sshConfig);
 
     // Captura os logs filtrando pelo processo especifico do PM2 dentro do container
     const result = await ssh.execCommand(`docker exec ${container} pm2 logs ${processName} --lines ${lines} --nostream --raw`);

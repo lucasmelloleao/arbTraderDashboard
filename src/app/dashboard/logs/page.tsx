@@ -12,10 +12,13 @@ interface LogResponse {
 }
 
 const BOTS = [
-  { id: 'scanner', name: 'Loop Scanner', server: 'Servidor 2 (163.176.2.243)' },
-  { id: 'funding-arb', name: 'Funding Arb', server: 'Servidor 2 (163.176.2.243)' },
-  { id: 'liq-arbitrum', name: 'Liquidação Arbitrum', server: 'Servidor 1 (147.15.122.245)' },
-  { id: 'liq-polygon', name: 'Liquidação Polygon', server: 'Servidor 1 (147.15.122.245)' },
+  { id: 'scanner', name: 'Loop Scanner', server: 'Hetzner (178.104.51.125)' },
+  { id: 'funding-arb', name: 'Funding Arb', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-arbitrum', name: 'Liquidação Arbitrum', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-polygon', name: 'Liquidação Polygon', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-base', name: 'Liquidação Base', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-optimism', name: 'Liquidação Optimism', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-avalanche', name: 'Liquidação Avalanche', server: 'Hetzner (178.104.51.125)' },
 ];
 
 export default function RobotLogsPage() {
