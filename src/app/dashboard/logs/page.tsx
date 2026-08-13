@@ -25,6 +25,7 @@ export default function RobotLogsPage() {
   const [selectedBot, setSelectedBot] = useState('scanner');
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [changingBot, setChangingBot] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lines, setLines] = useState(150);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
@@ -32,9 +33,12 @@ export default function RobotLogsPage() {
 
   const logsEndRef = useRef<HTMLDivElement | null>(null);
 
-  const fetchLogs = async () => {
-    if (loading) return; // Evita empilhar requisições se a anterior ainda estiver respondendo
+  const fetchLogs = async (isBotChange = false) => {
+    if (loading) return;
     setLoading(true);
+    if (isBotChange) {
+      setChangingBot(true);
+    }
     setErrorMsg(null);
     try {
       const token = localStorage.getItem('token');
@@ -49,7 +53,6 @@ export default function RobotLogsPage() {
       }
 
       const data: LogResponse = await res.json();
-      // Sanitiza códigos de escape ANSI de cores (ex: [32m, [0m)
       const cleanLogs = (data.logs || []).map((line: string) => 
         line.replace(/\x1B\[[0-9;]*[mK]/g, '')
       );
@@ -59,18 +62,19 @@ export default function RobotLogsPage() {
       setErrorMsg(err.message || 'Falha ao buscar logs do servidor');
     } finally {
       setLoading(false);
+      setChangingBot(false);
     }
   };
 
   useEffect(() => {
-    fetchLogs();
+    fetchLogs(true);
   }, [selectedBot, lines]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const interval = setInterval(() => {
-      fetchLogs();
-    }, 7000); // 7 segundos de intervalo seguro para conexões SSH/HTTP da Oracle
+      fetchLogs(false);
+    }, 7000);
     return () => clearInterval(interval);
   }, [autoRefresh, selectedBot, lines, loading]);
 
@@ -166,7 +170,18 @@ export default function RobotLogsPage() {
       </div>
 
       {/* Console Display */}
-      <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
+      <div className="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
+        {/* Overlay de Bloqueio / Processando - apenas ao trocar de rede/processo */}
+        {changingBot && (
+          <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 text-white transition-all">
+            <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
+            <div className="text-center">
+              <p className="font-semibold text-sm text-slate-200">Processando...</p>
+              <p className="text-xs text-slate-400 mt-1">Carregando dados da rede {activeBot?.name}...</p>
+            </div>
+          </div>
+        )}
+
         {/* Console Header */}
         <div className="bg-slate-900 px-4 py-3 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-3">
