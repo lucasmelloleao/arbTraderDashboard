@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { ShieldAlert, ShieldCheck, RefreshCw, Copy, ExternalLink, Play, Pause, Settings, Layers } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ShieldAlert, ShieldCheck, RefreshCw, Copy, ExternalLink, Play, Pause, Settings, Layers, Terminal, Download, Server } from 'lucide-react';
 
 interface Candidate {
   _id: string;
@@ -35,8 +35,18 @@ const NETWORKS = [
   { id: 'avalanche', name: 'Avalanche', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
 ];
 
+const LOG_BOTS = [
+  { id: 'scanner', name: 'Loop Scanner', server: 'Hetzner (178.104.51.125)' },
+  { id: 'funding-arb', name: 'Funding Arb', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-arbitrum', name: 'Liquidação Arbitrum', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-polygon', name: 'Liquidação Polygon', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-base', name: 'Liquidação Base', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-optimism', name: 'Liquidação Optimism', server: 'Hetzner (178.104.51.125)' },
+  { id: 'liq-avalanche', name: 'Liquidação Avalanche', server: 'Hetzner (178.104.51.125)' },
+];
+
 export default function LiquidationPage() {
-  const [activeTab, setActiveTab] = useState<'monitor' | 'strategies'>('monitor');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'logs' | 'strategies'>('monitor');
   
   // Candidates State
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -49,6 +59,18 @@ export default function LiquidationPage() {
   const [loadingStrategies, setLoadingStrategies] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Terminal Logs State
+  const [selectedBot, setSelectedBot] = useState('liq-arbitrum');
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [changingBot, setChangingBot] = useState(false);
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
+  const [logLines, setLogLines] = useState(150);
+  const [lastUpdateLogs, setLastUpdateLogs] = useState<string | null>(null);
+  const [errorLogs, setErrorLogs] = useState<string | null>(null);
+
+  const logsEndRef = useRef<HTMLDivElement | null>(null);
 
   const fetchCandidates = async () => {
     setLoadingCandidates(true);
@@ -81,6 +103,37 @@ export default function LiquidationPage() {
       setErrorMsg(e.message || 'Falha ao buscar estratégias');
     } finally {
       setLoadingStrategies(false);
+    }
+  };
+
+  const fetchLogs = async (isBotChange = false) => {
+    if (loadingLogs) return;
+    setLoadingLogs(true);
+    if (isBotChange) {
+      setChangingBot(true);
+    }
+    setErrorLogs(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/perp-arb/logs?process=${selectedBot}&lines=${logLines}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Erro na API de Logs (${res.status})`);
+      }
+
+      const data = await res.json();
+      const cleanLogs = (data.logs || []).map((line: string) => 
+        line.replace(/\x1B\[[0-9;]*[mK]/g, '')
+      );
+      setTerminalLogs(cleanLogs);
+      setLastUpdateLogs(new Date().toLocaleTimeString());
+    } catch (err: any) {
+      setErrorLogs(err.message || 'Falha ao buscar logs do servidor');
+    } finally {
+      setLoadingLogs(false);
+      setChangingBot(false);
     }
   };
 
@@ -118,10 +171,39 @@ export default function LiquidationPage() {
     fetchStrategies();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      fetchLogs(true);
+    }
+  }, [selectedBot, logLines, activeTab]);
+
+  useEffect(() => {
+    if (!autoRefreshLogs || activeTab !== 'logs') return;
+    const interval = setInterval(() => {
+      fetchLogs(false);
+    }, 7000);
+    return () => clearInterval(interval);
+  }, [autoRefreshLogs, selectedBot, logLines, loadingLogs, activeTab]);
+
+  useEffect(() => {
+    if (logsEndRef.current && autoRefreshLogs) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [terminalLogs]);
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleDownloadLogs = () => {
+    const blob = new Blob([terminalLogs.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `logs-${selectedBot}-${new Date().toISOString().slice(0, 10)}.log`;
+    a.click();
   };
 
   const stats = React.useMemo(() => {
@@ -146,6 +228,7 @@ export default function LiquidationPage() {
   };
 
   const activeStrategiesCount = strategies.filter(s => s.executionEnabled).length;
+  const activeBot = LOG_BOTS.find((b) => b.id === selectedBot);
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto text-slate-100">
@@ -157,16 +240,16 @@ export default function LiquidationPage() {
             Liquidações Aave V3 (Multi-chain)
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Gerencie robôs de liquidação e monitore posições devedoras próximas ao limite em tempo real.
+            Gerencie robôs de liquidação, monitore posições devedoras críticas e acompanhe os logs em tempo real.
           </p>
         </div>
 
         <button
-          onClick={activeTab === 'monitor' ? fetchCandidates : fetchStrategies}
-          disabled={loadingCandidates || loadingStrategies}
+          onClick={activeTab === 'monitor' ? fetchCandidates : activeTab === 'strategies' ? fetchStrategies : () => fetchLogs(false)}
+          disabled={loadingCandidates || loadingStrategies || loadingLogs}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold transition disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${(loadingCandidates || loadingStrategies) ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${(loadingCandidates || loadingStrategies || loadingLogs) ? 'animate-spin' : ''}`} />
           Atualizar Dados
         </button>
       </div>
@@ -218,6 +301,17 @@ export default function LiquidationPage() {
           Monitor de Devedores
         </button>
         <button
+          onClick={() => setActiveTab('logs')}
+          className={`px-6 py-3 text-sm font-semibold border-b-2 transition flex items-center gap-2 ${
+            activeTab === 'logs'
+              ? 'border-indigo-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Terminal className="w-4 h-4" />
+          Logs em Tempo Real
+        </button>
+        <button
           onClick={() => setActiveTab('strategies')}
           className={`px-6 py-3 text-sm font-semibold border-b-2 transition flex items-center gap-2 ${
             activeTab === 'strategies'
@@ -231,7 +325,7 @@ export default function LiquidationPage() {
       </div>
 
       {/* Tab Contents */}
-      {activeTab === 'monitor' ? (
+      {activeTab === 'monitor' && (
         <div className="space-y-6">
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-2">
@@ -351,7 +445,128 @@ export default function LiquidationPage() {
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'logs' && (
+        <div className="space-y-6">
+          {/* Selectors */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {LOG_BOTS.map((bot) => {
+              const isSelected = selectedBot === bot.id;
+              return (
+                <button
+                  key={bot.id}
+                  onClick={() => setSelectedBot(bot.id)}
+                  className={`p-4 rounded-xl border text-left transition flex flex-col justify-between ${
+                    isSelected
+                      ? 'bg-indigo-600/10 border-indigo-500 text-white shadow-lg shadow-indigo-500/10'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-sm">{bot.name}</span>
+                    <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-slate-500">
+                    <Server className="w-3 h-3" />
+                    <span>{bot.server.split(' ')[0]}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Console Header & Body */}
+          <div className="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[550px]">
+            {changingBot && (
+              <div className="absolute inset-0 z-20 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-3 text-white">
+                <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
+                <div className="text-center">
+                  <p className="font-semibold text-sm">Carregando logs...</p>
+                  <p className="text-xs text-slate-400 mt-1">Conectando ao container {activeBot?.name}...</p>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-slate-900 px-4 py-3 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
+              <div className="flex items-center gap-3">
+                <span className="font-mono bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/20">
+                  {activeBot?.name}
+                </span>
+                <button
+                  onClick={() => setAutoRefreshLogs(!autoRefreshLogs)}
+                  className={`px-2 py-0.5 rounded border text-[10px] font-bold ${
+                    autoRefreshLogs 
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {autoRefreshLogs ? 'AUTO-REFRESH ON' : 'PAUSADO'}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span>Linhas:</span>
+                  <select
+                    value={logLines}
+                    onChange={(e) => setLogLines(Number(e.target.value))}
+                    className="bg-slate-850 border border-slate-700 text-slate-300 rounded px-1.5 py-0.5 outline-none"
+                  >
+                    <option value={50}>50</option>
+                    <option value={150}>150</option>
+                    <option value={300}>300</option>
+                    <option value={500}>500</option>
+                  </select>
+                </div>
+                
+                <button
+                  onClick={handleDownloadLogs}
+                  disabled={terminalLogs.length === 0}
+                  className="p-1 bg-slate-850 hover:bg-slate-800 text-slate-300 border border-slate-750 rounded transition disabled:opacity-50"
+                  title="Baixar arquivo de log"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+                {lastUpdateLogs && <span>Atualizado: {lastUpdateLogs}</span>}
+              </div>
+            </div>
+
+            <div className="flex-1 p-4 font-mono text-xs overflow-y-auto space-y-1 bg-black/85 text-slate-300 selection:bg-indigo-500 selection:text-white">
+              {errorLogs ? (
+                <div className="text-rose-400 p-4 border border-rose-500/20 bg-rose-500/10 rounded-lg">
+                  ⚠️ {errorLogs}
+                </div>
+              ) : terminalLogs.length === 0 ? (
+                <div className="text-slate-500 italic p-4 text-center">
+                  {loadingLogs ? 'Buscando logs...' : 'Nenhum log encontrado para este robô.'}
+                </div>
+              ) : (
+                terminalLogs.map((line, i) => {
+                  const isError = line.includes('ERROR') || line.includes('ERR') || line.includes('FATAL') || line.includes('🚨');
+                  const isWarn = line.includes('WARN') || line.includes('⚠️') || line.includes('⛔');
+                  const isSuccess = line.includes('SUCCESS') || line.includes('✅') || line.includes('🟢');
+
+                  let textColor = 'text-slate-300';
+                  if (isError) textColor = 'text-rose-400 font-semibold';
+                  else if (isWarn) textColor = 'text-amber-300';
+                  else if (isSuccess) textColor = 'text-emerald-400';
+
+                  return (
+                    <div key={i} className={`whitespace-pre-wrap break-all hover:bg-slate-900/50 px-1 py-0.5 rounded ${textColor}`}>
+                      <span className="text-slate-600 select-none mr-3">{String(i + 1).padStart(3, ' ')}</span>
+                      {line}
+                    </div>
+                  );
+                })
+              )}
+              <div ref={logsEndRef} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'strategies' && (
         <div className="space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
             {errorMsg && (
