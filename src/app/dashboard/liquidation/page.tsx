@@ -36,8 +36,6 @@ const NETWORKS = [
 ];
 
 const LOG_BOTS = [
-  { id: 'scanner', name: 'Loop Scanner', server: 'Hetzner (178.104.51.125)' },
-  { id: 'funding-arb', name: 'Funding Arb', server: 'Hetzner (178.104.51.125)' },
   { id: 'liq-arbitrum', name: 'Liquidação Arbitrum', server: 'Hetzner (178.104.51.125)' },
   { id: 'liq-polygon', name: 'Liquidação Polygon', server: 'Hetzner (178.104.51.125)' },
   { id: 'liq-base', name: 'Liquidação Base', server: 'Hetzner (178.104.51.125)' },
@@ -70,7 +68,7 @@ export default function LiquidationPage() {
   const [lastUpdateLogs, setLastUpdateLogs] = useState<string | null>(null);
   const [errorLogs, setErrorLogs] = useState<string | null>(null);
 
-  const logsEndRef = useRef<HTMLDivElement | null>(null);
+  const terminalContainerRef = useRef<HTMLDivElement | null>(null);
 
   const fetchCandidates = async () => {
     setLoadingCandidates(true);
@@ -186,10 +184,10 @@ export default function LiquidationPage() {
   }, [autoRefreshLogs, selectedBot, logLines, loadingLogs, activeTab]);
 
   useEffect(() => {
-    if (logsEndRef.current && autoRefreshLogs) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (terminalContainerRef.current && autoRefreshLogs) {
+      terminalContainerRef.current.scrollTop = terminalContainerRef.current.scrollHeight;
     }
-  }, [terminalLogs]);
+  }, [terminalLogs, autoRefreshLogs]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -532,7 +530,7 @@ export default function LiquidationPage() {
               </div>
             </div>
 
-            <div className="flex-1 p-4 font-mono text-xs overflow-y-auto space-y-1 bg-black/85 text-slate-300 selection:bg-indigo-500 selection:text-white">
+            <div ref={terminalContainerRef} className="flex-1 p-4 font-mono text-xs overflow-y-auto space-y-1 bg-black/85 text-slate-300 selection:bg-indigo-500 selection:text-white">
               {errorLogs ? (
                 <div className="text-rose-400 p-4 border border-rose-500/20 bg-rose-500/10 rounded-lg">
                   ⚠️ {errorLogs}
@@ -560,7 +558,7 @@ export default function LiquidationPage() {
                   );
                 })
               )}
-              <div ref={logsEndRef} />
+              {/* end log anchor */}
             </div>
           </div>
         </div>

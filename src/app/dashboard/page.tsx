@@ -169,7 +169,9 @@ export default function DashboardOverview() {
         if (Array.isArray(history)) {
           history.forEach((snapshot: any) => {
             const dateObj = new Date(snapshot.timestamp);
-            dateObj.setMinutes(0, 0, 0); // agrupa por hora
+            const hour = dateObj.getHours();
+            const windowHour = Math.floor(hour / 6) * 6;
+            dateObj.setHours(windowHour, 0, 0, 0); // agrupa por blocos de 6 horas (00h, 06h, 12h, 18h)
             const timeKey = dateObj.getTime();
 
             if (!chartDataMap[timeKey]) {
@@ -276,11 +278,13 @@ export default function DashboardOverview() {
         setTotalCexUsd(liveSpot + liveFutures);
       }
 
-      // Adiciona ponto ao gráfico (agrupado por hora, consistente com os snapshots)
+      // Adiciona ponto ao gráfico (agrupado por 6h, consistente com os snapshots)
       setHistoryData(prev => {
         if (!prev || prev.length === 0) return prev;
         const now = new Date();
-        now.setMinutes(0, 0, 0); // agrupa por hora
+        const hour = now.getHours();
+        const windowHour = Math.floor(hour / 6) * 6;
+        now.setHours(windowHour, 0, 0, 0); // agrupa por 6 horas
         const timeKey = now.getTime();
         const newPoint = {
           time: timeKey,
@@ -289,7 +293,7 @@ export default function DashboardOverview() {
           futuresUsdValue: liveFutures,
           totalUsdValue: liveSpot + liveFutures,
         };
-        // Se o último ponto é da mesma hora, substitui; senão adiciona
+        // Se o último ponto é da mesma janela de 6h, substitui; senão adiciona
         const last = prev[prev.length - 1];
         const withoutLast = last && last.time === timeKey ? prev.slice(0, -1) : prev;
         return [...withoutLast, newPoint];

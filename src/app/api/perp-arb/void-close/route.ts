@@ -44,6 +44,7 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
     });
 
     strat.positionOpen = false;
+    strat.active = false;
     strat.positionSize = 0;
     strat.positionOpenedAt = null;
     strat.fundingCollected = 0;

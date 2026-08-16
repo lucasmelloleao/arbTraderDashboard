@@ -5,6 +5,9 @@ import {
   RefreshCw,
   Plus,
   Search,
+  Terminal,
+  Download,
+  Server,
 } from 'lucide-react';
 import { PerpArbStrategy, PerpArbTrade, ExchangeKey, ConfirmState } from './types';
 import { StatsHeader } from './components/StatsHeader';
@@ -60,9 +63,61 @@ export default function PerpetualArbPage() {
   const [livePositions, setLivePositions] = useState<any[]>([]);
   const [liveSpotCoins, setLiveSpotCoins] = useState<any[]>([]);
 
+  // ── Terminal Logs State ──
+  const [selectedBot, setSelectedBot] = useState<'scanner' | 'funding-arb'>('funding-arb');
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
+  const [logLines, setLogLines] = useState(150);
+  const [lastUpdateLogs, setLastUpdateLogs] = useState<string | null>(null);
+  const [errorLogs, setErrorLogs] = useState<string | null>(null);
+  const terminalContainerRef = React.useRef<HTMLDivElement | null>(null);
+
+  const [changingBot, setChangingBot] = useState(false);
+
+  const fetchLogs = async (isBotChange = false) => {
+    if (loadingLogs) return;
+    setLoadingLogs(true);
+    if (isBotChange) {
+      setChangingBot(true);
+    }
+    setErrorLogs(null);
+    try {
+      const res = await fetch(`/api/perp-arb/logs?process=${selectedBot}&lines=${logLines}`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error(`Erro na API de Logs (${res.status})`);
+      const data = await res.json();
+      const cleanLogs = (data.logs || []).map((line: string) => line.replace(/\x1B\[[0-9;]*[mK]/g, ''));
+      setTerminalLogs(cleanLogs);
+      setLastUpdateLogs(new Date().toLocaleTimeString());
+    } catch (err: any) {
+      setErrorLogs(err.message || 'Falha ao buscar logs');
+    } finally {
+      setLoadingLogs(false);
+      setChangingBot(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs(true);
+  }, [selectedBot, logLines]);
+
+  useEffect(() => {
+    if (!autoRefreshLogs) return;
+    const interval = setInterval(fetchLogs, 7000);
+    return () => clearInterval(interval);
+  }, [autoRefreshLogs, selectedBot, logLines]);
+
+  useEffect(() => {
+    if (terminalContainerRef.current && autoRefreshLogs) {
+      terminalContainerRef.current.scrollTop = terminalContainerRef.current.scrollHeight;
+    }
+  }, [terminalLogs, autoRefreshLogs]);
+
   // ── Derived stats ──
   const totalPnl = trades.reduce((acc, t) => acc + (t.pnl ?? 0), 0);
-  const executedCount = trades.filter((t) => t.type === 'close_hedge' && (t.status === 'executed' || t.status === 'simulated')).length;
+  const executedCount = trades.filter((t) => t.type === 'close_hedge' && (t.status === 'executed' || t.status === 'simulated' || t.status === 'voided')).length;
 
   const openPositions = useMemo(() => {
     const map = new Map<string, any>();
@@ -85,7 +140,7 @@ export default function PerpetualArbPage() {
       const symbolKey = openTrade.perpSymbol || (openTrade.strategyId as any)?.perpSymbol || '';
 
       const hasCloseTrade = trades.some((t) => {
-        if (t.type !== 'close_hedge' || (t.status !== 'executed' && t.status !== 'simulated')) return false;
+        if (t.type !== 'close_hedge' || (t.status !== 'executed' && t.status !== 'simulated' && t.status !== 'voided')) return false;
         const closeStratId = typeof t.strategyId === 'object' && t.strategyId !== null
           ? String((t.strategyId as any)._id)
           : String(t.strategyId || '');
@@ -240,13 +295,13 @@ export default function PerpetualArbPage() {
     finally { setLoadingBalances(false); }
   };
 
-    const fetchLivePositions = async () => {
+  const fetchLivePositions = async () => {
     try {
       const res = await fetch('/api/portfolio/live', { headers: authHeaders(), cache: 'no-store' });
-            if (res.ok) {
+      if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.positions)) setLivePositions(data.positions);
-        if (Array.isArray(data.spotCoins)) setLiveSpotCoins(data.spotCoins);
+        if (Array.isArray(data.positions) && data.positions.length > 0) setLivePositions(data.positions);
+        if (Array.isArray(data.spotCoins) && data.spotCoins.length > 0) setLiveSpotCoins(data.spotCoins);
       }
     } catch { /* silent */ }
   };
@@ -627,6 +682,134 @@ export default function PerpetualArbPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Terminal Logs Component */}
+      <div className="rounded-xl border border-white/10 bg-slate-950/70 p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Terminal className="h-5 w-5 text-indigo-400" /> Logs do Robô de Arbitragem (Terminal)
+            </h2>
+            <p className="text-sm text-gray-400">Acompanhe os logs dos processos Loop Scanner e Funding Arb em tempo real.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedBot('funding-arb')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                selectedBot === 'funding-arb'
+                  ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.2)]'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+              }`}
+            >
+              Funding Arb
+            </button>
+            <button
+              onClick={() => setSelectedBot('scanner')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                selectedBot === 'scanner'
+                  ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.2)]'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+              }`}
+            >
+              Loop Scanner
+            </button>
+          </div>
+        </div>
+
+        {/* Console Container */}
+        <div className="relative bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[450px]">
+          {changingBot && (
+            <div className="absolute inset-0 z-20 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-3 text-white">
+              <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
+              <div className="text-center">
+                <p className="font-semibold text-sm">Carregando logs...</p>
+                <p className="text-xs text-slate-400 mt-1">Conectando ao container do {selectedBot === 'funding-arb' ? 'Funding Arb' : 'Loop Scanner'}...</p>
+              </div>
+            </div>
+          )}
+          <div className="bg-slate-900 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center gap-3">
+              <span className="font-mono bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/20">
+                {selectedBot === 'funding-arb' ? 'Funding Arb' : 'Loop Scanner'}
+              </span>
+              <button
+                onClick={() => setAutoRefreshLogs(!autoRefreshLogs)}
+                className={`px-2 py-0.5 rounded border text-[10px] font-bold ${
+                  autoRefreshLogs
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {autoRefreshLogs ? 'AUTO-REFRESH ON' : 'PAUSADO'}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span>Linhas:</span>
+                <select
+                  value={logLines}
+                  onChange={(e) => setLogLines(Number(e.target.value))}
+                  className="bg-slate-850 border border-slate-700 text-slate-300 rounded px-1.5 py-0.5 outline-none"
+                >
+                  <option value={50}>50</option>
+                  <option value={150}>150</option>
+                  <option value={300}>300</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+
+              <button
+                onClick={() => {
+                  const blob = new Blob([terminalLogs.join('\n')], { type: 'text/plain;charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `logs-${selectedBot}-${new Date().toISOString().slice(0, 10)}.log`;
+                  a.click();
+                }}
+                disabled={terminalLogs.length === 0}
+                className="p-1 bg-slate-850 hover:bg-slate-800 text-slate-300 border border-slate-750 rounded transition disabled:opacity-50"
+                title="Baixar arquivo de log"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+              {lastUpdateLogs && <span>Atualizado: {lastUpdateLogs}</span>}
+            </div>
+          </div>
+
+          <div ref={terminalContainerRef} className="flex-1 p-4 font-mono text-xs overflow-y-auto space-y-1 bg-black/85 text-slate-300 selection:bg-indigo-500 selection:text-white">
+            {errorLogs ? (
+              <div className="text-rose-400 p-4 border border-rose-500/20 bg-rose-500/10 rounded-lg">
+                ⚠️ {errorLogs}
+              </div>
+            ) : terminalLogs.length === 0 ? (
+              <div className="text-slate-500 italic p-4 text-center">
+                {loadingLogs ? 'Buscando logs...' : 'Nenhum log encontrado para este robô.'}
+              </div>
+            ) : (
+              terminalLogs.map((line, i) => {
+                const isError = line.includes('ERROR') || line.includes('ERR') || line.includes('FATAL') || line.includes('🚨');
+                const isWarn = line.includes('WARN') || line.includes('⚠️') || line.includes('⛔');
+                const isSuccess = line.includes('SUCCESS') || line.includes('✅') || line.includes('🟢');
+
+                let textColor = 'text-slate-300';
+                if (isError) textColor = 'text-rose-400 font-semibold';
+                else if (isWarn) textColor = 'text-amber-300';
+                else if (isSuccess) textColor = 'text-emerald-400';
+
+                return (
+                  <div key={i} className={`whitespace-pre-wrap break-all hover:bg-slate-900/50 px-1 py-0.5 rounded ${textColor}`}>
+                    <span className="text-slate-600 select-none mr-3">{String(i + 1).padStart(3, ' ')}</span>
+                    {line}
+                  </div>
+                );
+              })
+            )}
+            {/* end log anchor */}
+          </div>
+        </div>
       </div>
 
       {/* Strategies Grid */}

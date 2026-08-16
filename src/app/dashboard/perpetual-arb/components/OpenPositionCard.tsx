@@ -54,10 +54,6 @@ export function OpenPositionCard({
   const spotBase = String(s.spotSymbol || s.perpSymbol || '').split('/')[0].trim();
   const spotCoin = (liveSpotCoins || []).find((c: any) => String(c.asset || '').toUpperCase() === spotBase.toUpperCase());
 
-  const positionSize = livePos && Number(livePos.notional) > 0
-    ? Number(livePos.notional)
-    : Number(s.positionSize || s.tradeSize || 0);
-
   const stratTrades = trades.filter((t) => {
     const sId = typeof t.strategyId === 'object' && t.strategyId !== null ? (t.strategyId as any)._id : t.strategyId;
     return String(sId) === String(s._id) || t.perpSymbol === s.perpSymbol;
@@ -79,18 +75,36 @@ export function OpenPositionCard({
     return () => clearInterval(interval);
   }, [openedAt]);
 
-      // Entry do SPOT e do PERP: no hedge delta-neutro (1X) o robô compra spot e vende
-      // perp ao MESMO preço de entrada. Por isso prioriza o entry REAL da posição perp
-      // (livePos.entryPrice = 0.19647 p/ BTW), tanto para o long quanto para o short.
-      // O cost basis geral da moeda (avgCostPrice) é descartado aqui, pois reflete o
-      // preço médio de TODA a carteira spot e não a entrada desta operação de hedge.
-      const entrySpot = livePos && Number(livePos.entryPrice) > 0
-        ? Number(livePos.entryPrice)
-        : Number(spotCoin && Number(spotCoin.avgCostPrice) > 0 ? spotCoin.avgCostPrice : 0) || (openTrade?.spotPrice || s.lastSpotPrice || 0);
+  // Entrada FIXA da posição: prioriza o registro real de execução do trade de abertura (openTrade)
+  const initialEntryRef = React.useRef<{ entrySpot: number; entryPerp: number; entryContracts: number; positionSize: number } | null>(null);
 
-      // Preço de entrada do PERP: prioriza o valor REAL da posição da corretora (livePos),
-      // senão o preço gravado no trade de abertura.
-      const entryPerp = livePos ? Number(livePos.entryPrice) || 0 : (openTrade?.perpPrice || s.lastPerpPrice || 0);
+  const currentEntrySpot = openTrade?.spotPrice && Number(openTrade.spotPrice) > 0
+    ? Number(openTrade.spotPrice)
+    : (livePos && Number(livePos.entryPrice) > 0 ? Number(livePos.entryPrice) : Number(s.lastSpotPrice || 0));
+
+  const currentEntryPerp = openTrade?.perpPrice && Number(openTrade.perpPrice) > 0
+    ? Number(openTrade.perpPrice)
+    : (livePos && Number(livePos.entryPrice) > 0 ? Number(livePos.entryPrice) : Number(s.lastPerpPrice || 0));
+
+  const currentPositionSize = openTrade?.amount && Number(openTrade.amount) > 0
+    ? Number(openTrade.amount)
+    : Number(s.positionSize || s.tradeSize || 0);
+
+  const currentEntryContracts = currentEntrySpot > 0 ? currentPositionSize / currentEntrySpot : 0;
+
+  if (!initialEntryRef.current && currentPositionSize > 0) {
+    initialEntryRef.current = {
+      entrySpot: currentEntrySpot,
+      entryPerp: currentEntryPerp,
+      entryContracts: currentEntryContracts,
+      positionSize: currentPositionSize,
+    };
+  }
+
+  const entrySpot = initialEntryRef.current?.entrySpot || currentEntrySpot;
+  const entryPerp = initialEntryRef.current?.entryPerp || currentEntryPerp;
+  const entryContracts = initialEntryRef.current?.entryContracts || currentEntryContracts;
+  const positionSize = initialEntryRef.current?.positionSize || currentPositionSize;
 
   // Preço real de marca da corretora (usado para P&L) e tickers para a saída estimada.
   const liveMarkPrice = livePos ? Number(livePos.markPrice) || 0 : 0;
@@ -108,12 +122,9 @@ export function OpenPositionCard({
   const spotUnits = entrySpot > 0 ? positionSize / entrySpot : 0;
   const perpUnits = entryPerp > 0 ? positionSize / entryPerp : 0;
 
-    // PnL REAL de saída instantânea a mercado. Como spot e perp entram no MESMO preço
-  // (hedge 1X, entry = livePos.entryPrice = 0.19647), o P&L do long é o ganho/prejuízo
-  // do preço spot atual vs entrada; e o do short vem da própria exchange (livePos.unrealizedPnl).
+  // PnL REAL de saída instantânea a mercado calculado de forma simétrica em ambas as pernas
   const spotPnL = spotUnits > 0 && exitSpotPrice > 0 ? (exitSpotPrice - entrySpot) * spotUnits : 0;
-  const perpPnL = livePos ? Number(livePos.unrealizedPnl) || 0
-    : (perpUnits > 0 && exitPerpPrice > 0 ? (entryPerp - exitPerpPrice) * perpUnits : 0);
+  const perpPnL = perpUnits > 0 && exitPerpPrice > 0 ? (entryPerp - exitPerpPrice) * perpUnits : 0;
   const marketPnL = spotPnL + perpPnL;
 
   const openedTime = openedAt ? new Date(openedAt).getTime() : 0;
