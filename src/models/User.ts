@@ -6,6 +6,8 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true }, // will be hashed
   twoFactorSecret: { type: String, required: false },
   twoFactorEnabled: { type: Boolean, default: false },
+  telegramBotToken: { type: String, required: false },
+  telegramChatId: { type: String, required: false },
   resetPasswordCode: { type: String, required: false },
   resetPasswordExpires: { type: Date, required: false },
   createdAt: { type: Date, default: Date.now }

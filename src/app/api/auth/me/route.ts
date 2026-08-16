@@ -15,3 +15,28 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 });
+
+export const PUT = withAuth(async (req: NextRequest, userId: string) => {
+  try {
+    await connectToDatabase();
+    const { telegramBotToken, telegramChatId } = await req.json();
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    user.telegramBotToken = (telegramBotToken || '').trim();
+    user.telegramChatId = (telegramChatId || '').trim();
+    await user.save();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Configurações do Telegram salvas com sucesso!',
+      telegramBotToken: user.telegramBotToken,
+      telegramChatId: user.telegramChatId,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+});

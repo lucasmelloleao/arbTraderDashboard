@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, Lock, Key, Shield, QrCode, ShieldOff } from 'lucide-react';
+import { User, Lock, Key, Shield, QrCode, ShieldOff, Send, MessageSquare, Bot, HelpCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 import clsx from 'clsx';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -100,6 +100,13 @@ export default function ProfilePage() {
   const [twoFactorMessage, setTwoFactorMessage] = useState('');
   const [twoFactorError, setTwoFactorError] = useState('');
 
+  // Telegram States
+  const [telegramBotToken, setTelegramBotToken] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramMessage, setTelegramMessage] = useState('');
+  const [telegramError, setTelegramError] = useState('');
+
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -112,9 +119,40 @@ export default function ProfilePage() {
       if (res.ok) {
         const data = await res.json();
         setTwoFactorEnabled(data.twoFactorEnabled || false);
+        setTelegramBotToken(data.telegramBotToken || '');
+        setTelegramChatId(data.telegramChatId || '');
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleSaveTelegram = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTelegramLoading(true);
+    setTelegramError('');
+    setTelegramMessage('');
+    try {
+      const res = await fetch('/api/auth/me', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ telegramBotToken, telegramChatId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTelegramMessage('Configurações do Telegram salvas com sucesso!');
+        setTelegramBotToken(data.telegramBotToken || '');
+        setTelegramChatId(data.telegramChatId || '');
+      } else {
+        setTelegramError(data.error || 'Falha ao salvar configurações do Telegram');
+      }
+    } catch (err: any) {
+      setTelegramError(err.message || 'Erro inesperado ao salvar');
+    } finally {
+      setTelegramLoading(false);
     }
   };
 
@@ -454,6 +492,126 @@ export default function ProfilePage() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Telegram Integration Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl lg:col-span-2">
+          <div className="flex items-center gap-2 mb-6">
+            <Send className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-lg font-medium text-white">Integração com o Telegram</h2>
+          </div>
+
+          <p className="text-sm text-slate-400 mb-4">
+            Configure seu <strong>Bot Token</strong> (do <code className="text-indigo-300 bg-slate-950 px-1.5 py-0.5 rounded">@BotFather</code>) e seu <strong>Chat ID</strong> (do <code className="text-indigo-300 bg-slate-950 px-1.5 py-0.5 rounded">@userinfobot</code>) para receber notificações e comandos exclusivos das suas operações.
+          </p>
+
+          {telegramError && (
+            <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
+              {telegramError}
+            </div>
+          )}
+          {telegramMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+              {telegramMessage}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveTelegram} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Telegram Bot Token</label>
+                <div className="relative">
+                  <Bot className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    value={telegramBotToken}
+                    onChange={(e) => setTelegramBotToken(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-shadow font-mono"
+                    placeholder="8523015362:AAE80zQhff..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Telegram Chat ID</label>
+                <div className="relative">
+                  <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    value={telegramChatId}
+                    onChange={(e) => setTelegramChatId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-shadow font-mono"
+                    placeholder="999232604"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-800 flex justify-end">
+              <button
+                type="submit"
+                disabled={telegramLoading}
+                className={clsx(
+                  "bg-indigo-600 text-white rounded-lg px-6 py-2.5 text-sm font-medium transition-all hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex items-center justify-center gap-2",
+                  telegramLoading && "opacity-70 cursor-not-allowed"
+                )}
+              >
+                {telegramLoading ? "Salvando..." : "Salvar Configurações do Telegram"}
+              </button>
+            </div>
+          </form>
+
+          {/* Passo a Passo / Tutorial Telegram */}
+          <div className="mt-8 pt-6 border-t border-slate-800 space-y-4">
+            <div className="flex items-center gap-2 text-indigo-400 font-medium text-sm">
+              <HelpCircle className="w-4 h-4" />
+              <span>Passo a Passo: Como obter o Bot Token e o Chat ID no Telegram</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              {/* Passo 1 */}
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-white">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 text-xs">1</span>
+                  <span>Criar o seu Bot</span>
+                </div>
+                <p className="text-slate-400 leading-relaxed">
+                  No Telegram, busque por <strong>@BotFather</strong>, inicie a conversa e envie o comando <code className="text-indigo-300">/newbot</code>.
+                </p>
+                <p className="text-slate-400 leading-relaxed">
+                  Escolha o nome do seu robô e copie o <strong>HTTP API Token</strong> gerado (ex: <code className="text-slate-300">852301...</code>).
+                </p>
+              </div>
+
+              {/* Passo 2 */}
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-white">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 text-xs">2</span>
+                  <span>Descobrir o seu Chat ID</span>
+                </div>
+                <p className="text-slate-400 leading-relaxed">
+                  Busque pelo bot <strong>@userinfobot</strong> ou <strong>@raw_data_bot</strong> e envie o comando <code className="text-indigo-300">/start</code>.
+                </p>
+                <p className="text-slate-400 leading-relaxed">
+                  Copie o número retornado no campo <strong>Id</strong> (ex: <code className="text-slate-300">999232604</code>).
+                </p>
+              </div>
+
+              {/* Passo 3 */}
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-white">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 text-xs">3</span>
+                  <span>Ativar o Bot</span>
+                </div>
+                <p className="text-slate-400 leading-relaxed">
+                  Abra a conversa direta com o <strong>seu bot recém-criado</strong> no Telegram e clique em <strong>/start</strong>.
+                </p>
+                <p className="text-slate-400 leading-relaxed">
+                  Preencha os campos acima, clique em <strong>Salvar</strong> e pronto! Você passará a receber notificações em tempo real.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
