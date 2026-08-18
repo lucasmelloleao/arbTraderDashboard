@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Zap, TrendingUp, Shield, BrainCircuit, ArrowRight, BarChart3, Activity } from 'lucide-react';
+import HelpButton from '@/components/HelpButton';
 
 export default function Home() {
   return (
@@ -11,7 +12,8 @@ export default function Home() {
             <Zap className="w-7 h-7 text-indigo-500" />
             <span className="text-xl font-bold text-white tracking-tight">ArbTrade</span>
           </div>
-          <div>
+          <div className="flex items-center gap-3">
+            <HelpButton />
             <Link 
               href="/login"
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-medium transition-all shadow-lg shadow-indigo-500/20"

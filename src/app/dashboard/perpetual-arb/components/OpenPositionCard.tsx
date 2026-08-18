@@ -13,6 +13,7 @@ interface OpenPositionCardProps {
   isClosingThis: boolean;
   onClosePosition: (strategy: any) => void;
   onVoidClose: (strategy: any) => void;
+  onIncreasePosition: (strategy: any) => void;
 }
 
 function formatElapsed(openedAt: string | Date | undefined): string {
@@ -39,6 +40,7 @@ export function OpenPositionCard({
   isClosingThis,
   onClosePosition,
   onVoidClose,
+  onIncreasePosition,
 }: OpenPositionCardProps) {
   // Posição FUTURA REAL da corretora (entry/mark/PnL) correspondente a este par, vinda
   // do /api/portfolio/live. Reflete a MEXC com fidelidade (em vez de preços gravados).
@@ -86,25 +88,16 @@ export function OpenPositionCard({
     ? Number(openTrade.perpPrice)
     : (livePos && Number(livePos.entryPrice) > 0 ? Number(livePos.entryPrice) : Number(s.lastPerpPrice || 0));
 
-  const currentPositionSize = openTrade?.amount && Number(openTrade.amount) > 0
-    ? Number(openTrade.amount)
-    : Number(s.positionSize || s.tradeSize || 0);
+  const currentPositionSize = Number(s.positionSize) > 0
+    ? Number(s.positionSize)
+    : (openTrade?.amount && Number(openTrade.amount) > 0 ? Number(openTrade.amount) : Number(s.tradeSize || 0));
 
   const currentEntryContracts = currentEntrySpot > 0 ? currentPositionSize / currentEntrySpot : 0;
 
-  if (!initialEntryRef.current && currentPositionSize > 0) {
-    initialEntryRef.current = {
-      entrySpot: currentEntrySpot,
-      entryPerp: currentEntryPerp,
-      entryContracts: currentEntryContracts,
-      positionSize: currentPositionSize,
-    };
-  }
-
-  const entrySpot = initialEntryRef.current?.entrySpot || currentEntrySpot;
-  const entryPerp = initialEntryRef.current?.entryPerp || currentEntryPerp;
-  const entryContracts = initialEntryRef.current?.entryContracts || currentEntryContracts;
-  const positionSize = initialEntryRef.current?.positionSize || currentPositionSize;
+  const entrySpot = currentEntrySpot;
+  const entryPerp = currentEntryPerp;
+  const entryContracts = currentEntryContracts;
+  const positionSize = currentPositionSize;
 
   // Preço real de marca da corretora (usado para P&L) e tickers para a saída estimada.
   const liveMarkPrice = livePos ? Number(livePos.markPrice) || 0 : 0;
@@ -122,7 +115,7 @@ export function OpenPositionCard({
   const spotUnits = entrySpot > 0 ? positionSize / entrySpot : 0;
   const perpUnits = entryPerp > 0 ? positionSize / entryPerp : 0;
 
-  // PnL REAL de saída instantânea a mercado calculado de forma simétrica em ambas as pernas
+  // PnL REAL de saída instantânea a mercado calculated de forma simétrica em ambas as pernas
   const spotPnL = spotUnits > 0 && exitSpotPrice > 0 ? (exitSpotPrice - entrySpot) * spotUnits : 0;
   const perpPnL = perpUnits > 0 && exitPerpPrice > 0 ? (entryPerp - exitPerpPrice) * perpUnits : 0;
   const marketPnL = spotPnL + perpPnL;
@@ -203,6 +196,14 @@ export function OpenPositionCard({
             </span>
             <button
               disabled={isClosingThis}
+              onClick={() => onIncreasePosition(s)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 text-xs font-bold shadow-[0_0_12px_rgba(79,70,229,0.4)] transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Aumentar aporte da posição comprando Spot e Short Perpétuo"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> + Aumentar Aporte
+            </button>
+            <button
+              disabled={isClosingThis}
               onClick={() => onClosePosition(s)}
               className="inline-flex items-center gap-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white px-3 py-1.5 text-xs font-bold shadow-[0_0_12px_rgba(220,38,38,0.4)] transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Encerrar posição a mercado imediatamente"
@@ -278,36 +279,66 @@ export function OpenPositionCard({
         )}
 
         {/* Decomposição Explícita por Perna */}
-        <div className="mt-3 space-y-2 rounded-lg bg-slate-900/90 border border-white/10 p-3 text-xs">
-          <div className="font-semibold text-slate-300 border-b border-white/5 pb-1 flex justify-between">
-            <span>Resultado de Cada Perna:</span>
-            <span className="text-[10px] text-gray-400 font-normal">Hedge 1X (Delta Neutro)</span>
+        <div className="mt-3 space-y-2.5 rounded-lg bg-slate-900/90 border border-white/10 p-3.5 text-xs">
+          <div className="font-semibold text-slate-200 border-b border-white/10 pb-1.5 flex justify-between items-center">
+            <span className="text-sm">📊 PnL por Perna &amp; Diferença Liquida</span>
+            <span className="text-[10px] text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30">Hedge 1X (Delta Neutro)</span>
           </div>
 
-          {/* Perna 1: Spot LONG (Vende no Bid) */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-gray-300">
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Spot (LONG)
-              </span>
-              {entrySpot > 0 && <span className="text-slate-400 font-mono text-[11px]">${fmtP(entrySpot)} → ${fmtP(exitSpotPrice)} (Bid)</span>}
+          {/* Perna 1: Spot LONG */}
+          <div className="p-2 rounded bg-slate-950/60 border border-emerald-500/20 flex items-center justify-between">
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Spot (LONG)
+                </span>
+                <span className="text-slate-300 font-semibold">{s.spotSymbol || 'Spot'}</span>
+              </div>
+              {entrySpot > 0 && (
+                <span className="text-slate-400 font-mono text-[11px]">
+                  Entrada: ${fmtP(entrySpot)} → Atual (Bid): ${fmtP(exitSpotPrice)}
+                </span>
+              )}
             </div>
-            <div className={`font-mono font-bold ${spotPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {fmtUSDT(spotPnL)} USDT
+            <div className="text-right">
+              <div className="text-[10px] text-slate-400 uppercase">PnL Spot</div>
+              <div className={`font-mono font-bold text-sm ${spotPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmtUSDT(spotPnL)} USDT
+              </div>
             </div>
           </div>
 
-          {/* Perna 2: Perp SHORT (Compra no Ask) */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-gray-300">
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                Perpétuo (SHORT)
-              </span>
-              {entryPerp > 0 && <span className="text-slate-400 font-mono text-[11px]">${fmtP(entryPerp)} → ${fmtP(exitPerpPrice)} (Ask)</span>}
+          {/* Perna 2: Perp SHORT */}
+          <div className="p-2 rounded bg-slate-950/60 border border-purple-500/20 flex items-center justify-between">
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  Perpétuo (SHORT)
+                </span>
+                <span className="text-slate-300 font-semibold">{s.perpSymbol || 'Perp'}</span>
+              </div>
+              {entryPerp > 0 && (
+                <span className="text-slate-400 font-mono text-[11px]">
+                  Entrada: ${fmtP(entryPerp)} → Atual (Ask/Mark): ${fmtP(exitPerpPrice)}
+                </span>
+              )}
             </div>
-            <div className={`font-mono font-bold ${perpPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {fmtUSDT(perpPnL)} USDT
+            <div className="text-right">
+              <div className="text-[10px] text-slate-400 uppercase">PnL Futuro (Não Realizado)</div>
+              <div className={`font-mono font-bold text-sm ${perpPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmtUSDT(perpPnL)} USDT
+              </div>
             </div>
+          </div>
+
+          {/* Resumo Diferença/Soma dos PnLs das Pernas */}
+          <div className="p-2 rounded bg-indigo-950/30 border border-indigo-500/30 flex items-center justify-between font-mono">
+            <span className="text-indigo-200 text-[11px] font-sans font-medium">
+              ⚖️ Soma/Diferença das Pernas (Spot + Futuro):
+            </span>
+            <span className={`font-bold ${marketPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {fmtUSDT(marketPnL)} USDT
+            </span>
           </div>
 
           {/* Perna 3: Funding Coletado com Hover Tooltip */}

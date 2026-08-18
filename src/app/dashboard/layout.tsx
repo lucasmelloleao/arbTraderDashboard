@@ -3,8 +3,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Wallet, Zap, LayoutDashboard, LogOut, History, Activity, TrendingUp, User, Menu, X, CalendarRange, Terminal, ShieldAlert, ChevronDown } from 'lucide-react';
+import { Wallet, Zap, LayoutDashboard, LogOut, History, Activity, TrendingUp, User, Menu, X, CalendarRange, Terminal, ShieldAlert, ChevronDown, HelpCircle } from 'lucide-react';
 import clsx from 'clsx';
+import HelpModal from '@/components/HelpModal';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -113,6 +115,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </Link>
             )
           })}
+
+          {/* Ajuda */}
+          <button
+            onClick={() => { setIsHelpOpen(true); setIsMobileMenuOpen(false); }}
+            className={clsx(
+              "flex items-center rounded-lg text-sm font-medium transition-colors group w-full",
+              isCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5",
+              "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+            )}
+            title={isCollapsed ? 'Ajuda' : undefined}
+          >
+            <HelpCircle className="w-5 h-5 shrink-0 text-slate-500 group-hover:text-slate-300" />
+            {!isCollapsed && <span className="truncate">Ajuda</span>}
+          </button>
         </nav>
       </aside>
 
@@ -172,6 +188,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                 <div className="py-1">
                   <button
+                    onClick={() => { setIsHelpOpen(true); setIsUserMenuOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/70 transition-colors"
+                  >
+                    <HelpCircle className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <span>Ajuda</span>
+                  </button>
+                </div>
+
+                <div className="py-1">
+                  <button
                     onClick={() => { localStorage.removeItem('token'); router.push('/login'); }}
                     className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
                   >
@@ -189,6 +215,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </main>
+
+      {/* Help Modal */}
+      {isHelpOpen && <HelpModal onClose={() => setIsHelpOpen(false)} />}
     </div>
   );
 }

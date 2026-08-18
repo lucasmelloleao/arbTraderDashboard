@@ -3,8 +3,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   RefreshCw,
-  Plus,
-  Search,
   Terminal,
   Download,
   Server,
@@ -18,6 +16,7 @@ import { ConfirmModal } from './components/modals/ConfirmModal';
 import { StrategyFormModal } from './components/modals/StrategyFormModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { ManualScanModal } from './components/modals/ManualScanModal';
+import { IncreasePositionModal } from './components/modals/IncreasePositionModal';
 import { AiAdvisorCard } from './components/AiAdvisorCard';
 
 function getToken(): string {
@@ -44,6 +43,7 @@ export default function PerpetualArbPage() {
 
   const [showForm, setShowForm] = useState<{ mode: 'create' | 'edit'; strategy?: PerpArbStrategy } | null>(null);
   const [showManualScan, setShowManualScan] = useState(false);
+  const [showIncreaseModal, setShowIncreaseModal] = useState<PerpArbStrategy | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [exchangeKeys, setExchangeKeys] = useState<ExchangeKey[]>([]);
 
@@ -167,7 +167,7 @@ export default function PerpetualArbPage() {
             perpSymbol: pSym,
             spotSymbol: sSym,
             positionOpen: true,
-            positionSize: openTrade.amount,
+            positionSize: matchingStrat?.positionSize || openTrade.amount,
             positionOpenedAt: openTrade.createdAt,
             lastSpotPrice: openTrade.spotPrice,
             lastPerpPrice: openTrade.perpPrice,
@@ -397,6 +397,25 @@ export default function PerpetualArbPage() {
     }, 20000);
   };
 
+  const handleConfirmIncreasePosition = async (s: any, amount: number) => {
+    try {
+      const res = await fetch('/api/perp-arb/increase', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ strategyId: s._id, amount }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao aumentar aporte');
+      setSuccessMsg(`✅ Aporte para "${s.name}" aumentado em +$${amount.toFixed(2)} USDT (Novo total: $${data.newPositionSize?.toFixed(2)} USDT).`);
+      setTimeout(() => setSuccessMsg(null), 6000);
+      await fetchStrategies();
+      await fetchTrades();
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
   const handleClosePosition = (s: any) => {
     setConfirmState({
       message: `Encerrar a posição de "${s.name}" agora? O robô irá fechar o Spot (Venda) e Perpétuo (Recompra Short) a mercado na MEXC.`,
@@ -453,7 +472,7 @@ export default function PerpetualArbPage() {
     fetchExchanges();
     fetchBalances();
     refresh();
-    const interval = setInterval(refresh, 20000);
+    const interval = setInterval(refresh, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -498,6 +517,13 @@ export default function PerpetualArbPage() {
             setShowManualScan(false);
             setShowForm({ mode: 'create', strategy: data });
           }}
+        />
+      )}
+      {showIncreaseModal && (
+        <IncreasePositionModal
+          strategy={showIncreaseModal}
+          onClose={() => setShowIncreaseModal(null)}
+          onConfirmIncrease={handleConfirmIncreasePosition}
         />
       )}
 
@@ -546,24 +572,28 @@ export default function PerpetualArbPage() {
               </>
             )}
           </button>
+          {/* TODO: reativar quando implementado
           <button
             onClick={() => setShowManualScan(true)}
             className="inline-flex items-center gap-2 rounded-xl border border-indigo-500/40 bg-indigo-950/40 px-4 py-2 text-xs font-bold text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all shadow-lg"
           >
             <Search className="h-4 w-4" /> Busca Manual Cross-Exchange
           </button>
+          */}
           <button
             onClick={() => { fetchStrategies(); fetchTrades(); fetchSettings(); fetchBalances(); fetchLivePositions(); }}
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition-colors shadow-lg"
           >
             <RefreshCw className="h-4 w-4" /> Atualizar
           </button>
+          {/* TODO: reativar quando implementado
           <button
             onClick={() => setShowForm({ mode: 'create' })}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500 transition-colors shadow-lg"
           >
             <Plus className="h-4 w-4" /> Nova Estratégia
           </button>
+          */}
         </div>
       </div>
 
@@ -656,12 +686,13 @@ export default function PerpetualArbPage() {
                 <OpenPositionCard
                   key={s._id}
                   strategy={s}
-                                    trades={trades}
+                  trades={trades}
                   livePositions={livePositions}
                   liveSpotCoins={liveSpotCoins}
                   isClosingThis={closingSet.has(String(s._id)) || (s.perpSymbol ? closingSet.has(String(s.perpSymbol)) : false)}
                   onClosePosition={handleClosePosition}
                   onVoidClose={handleVoidClose}
+                  onIncreasePosition={(strat) => setShowIncreaseModal(strat)}
                 />
               ))
             )}
@@ -827,8 +858,9 @@ export default function PerpetualArbPage() {
           {loadingStrategies && strategies.length === 0 && <div className="text-sm text-gray-400 col-span-full">Carregando...</div>}
           {!loadingStrategies && strategies.length === 0 && (
             <div className="col-span-full rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-gray-500">
-              Nenhuma estratégia.{' '}
+              Nenhuma estratégia.{/* TODO: reativar quando implementado
               <button onClick={() => setShowForm({ mode: 'create' })} className="text-indigo-400 underline hover:text-indigo-300">Criar agora</button>
+              */}
             </div>
           )}
           {strategies.map((s) => (

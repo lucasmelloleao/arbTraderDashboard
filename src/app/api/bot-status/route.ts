@@ -15,7 +15,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     }
 
     await connectToDatabase();
-    const status = await BotStatus.findOne({ userId, botName });
+    const status = await BotStatus.findOne({ botName }).sort({ lastHeartbeat: -1 });
     
     if (!status) {
       return NextResponse.json({ isOnline: false });
