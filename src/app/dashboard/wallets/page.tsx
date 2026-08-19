@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Key, Sparkles, AlertTriangle, X, Copy, Check, Edit2, QrCode, Send } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useLanguage } from '@/lib/i18n';
 
 type TokenBalance = {
   symbol: string;
@@ -20,6 +21,7 @@ type Wallet = {
 }
 
 export default function WalletsPage() {
+  const { t } = useLanguage();
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [acronym, setAcronym] = useState('');
@@ -196,24 +198,24 @@ export default function WalletsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-2xl font-bold text-white">Registered Wallets</h3>
+        <h3 className="text-2xl font-bold text-white">{t('carteirasRegistradas')}</h3>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto mb-8 shadow-sm">
         <table className="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
           <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400">
             <tr>
-              <th className="px-6 py-4 font-medium">Acronym</th>
-              <th className="px-6 py-4 font-medium">Public Key</th>
-              <th className="px-6 py-4 font-medium">Balances</th>
-              <th className="px-6 py-4 font-medium text-right">Actions</th>
+              <th className="px-6 py-4 font-medium">Apelido</th>
+              <th className="px-6 py-4 font-medium">Chave Pública</th>
+              <th className="px-6 py-4 font-medium">Saldos</th>
+              <th className="px-6 py-4 font-medium text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
             {loading ? (
-              <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">Loading wallets and balances...</td></tr>
+              <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">{t('carregarCarteiras')}</td></tr>
             ) : wallets.length === 0 ? (
-              <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">No wallets registered yet.</td></tr>
+              <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">{t('nenhumaCarteira')}</td></tr>
             ) : wallets.map(wallet => (
               <tr 
                 key={wallet._id} 
@@ -254,16 +256,16 @@ export default function WalletsPage() {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-right flex items-center justify-end gap-2 align-top pt-5">
-                  <button onClick={(e) => openTransferModal(wallet, e)} className="text-slate-500 hover:text-amber-400 transition-colors p-2 rounded-md hover:bg-slate-800/80" title="Send Funds">
+                  <button onClick={(e) => openTransferModal(wallet, e)} className="text-slate-500 hover:text-amber-400 transition-colors p-2 rounded-md hover:bg-slate-800/80" title={t('enviarFundos')}>
                     <Send className="w-4 h-4" />
                   </button>
-                  <button onClick={(e) => openDepositModal(wallet, e)} className="text-slate-500 hover:text-emerald-400 transition-colors p-2 rounded-md hover:bg-slate-800/80" title="Deposit (Show QR)">
+                  <button onClick={(e) => openDepositModal(wallet, e)} className="text-slate-500 hover:text-emerald-400 transition-colors p-2 rounded-md hover:bg-slate-800/80" title={t('depositar')}>
                     <QrCode className="w-4 h-4" />
                   </button>
-                  <button onClick={(e) => openEditModal(wallet, e)} className="text-slate-500 hover:text-indigo-400 transition-colors p-2 rounded-md hover:bg-slate-800/80" title="Edit Acronym">
+                  <button onClick={(e) => openEditModal(wallet, e)} className="text-slate-500 hover:text-indigo-400 transition-colors p-2 rounded-md hover:bg-slate-800/80" title={t('editarApelido')}>
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button onClick={(e) => handleDelete(wallet._id, e)} className="text-slate-500 hover:text-red-400 transition-colors p-2 rounded-md hover:bg-slate-800/80" title="Delete Wallet">
+                  <button onClick={(e) => handleDelete(wallet._id, e)} className="text-slate-500 hover:text-red-400 transition-colors p-2 rounded-md hover:bg-slate-800/80" title={t('excluirCarteira')}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </td>
@@ -277,14 +279,14 @@ export default function WalletsPage() {
         <div className="mb-8 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6 text-emerald-100">
           <div className="flex items-center gap-3 mb-2 text-emerald-400">
             <AlertTriangle className="w-6 h-6" />
-            <h4 className="text-lg font-bold">Wallet Generated Successfully!</h4>
+            <h4 className="text-lg font-bold">{t('carteiraGerada')}</h4>
           </div>
-          <p className="text-sm mb-4">Please save the 12-word seed phrase below in a secure location. <strong className="text-emerald-300">This is the ONLY time it will be shown!</strong></p>
+          <p className="text-sm mb-4">{t('salveFrase')}</p>
           <div className="bg-emerald-950/50 border border-emerald-800/50 p-4 rounded-lg font-mono text-lg text-center tracking-wide shadow-inner">
             {generatedMnemonic}
           </div>
           <button onClick={() => setGeneratedMnemonic('')} className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm">
-            I have saved it securely
+            {t('salveiSeguro')}
           </button>
         </div>
       )}
@@ -293,12 +295,12 @@ export default function WalletsPage() {
         {/* Import Form */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm">
           <h4 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
-            <Key className="w-5 h-5 text-indigo-500" /> Import Wallet
+            <Key className="w-5 h-5 text-indigo-500" /> {t('importarCarteira')}
           </h4>
-          <p className="text-sm text-slate-400 mb-6">Import an existing Solana wallet by pasting its raw private key or 12/24-word seed phrase.</p>
+          <p className="text-sm text-slate-400 mb-6">Importe uma carteira Solana existente colando sua chave privada ou frase semente de 12/24 palavras.</p>
           <form onSubmit={handleAdd} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Network</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">{t('rede')}</label>
               <select 
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500"
                 value={network}
@@ -309,15 +311,15 @@ export default function WalletsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Acronym</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Apelido</label>
               <input required value={acronym} onChange={e => setAcronym(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" placeholder="e.g. MAIN_WALLET" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Secret Key or Seed Phrase (12/24 words)</label>
-              <input required type="password" value={secretKey} onChange={e => setSecretKey(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="Paste your raw secret key or seed phrase here" />
+              <label className="block text-sm text-slate-400 mb-1">Chave Secreta ou Frase Semente (12/24 palavras)</label>
+              <input required type="password" value={secretKey} onChange={e => setSecretKey(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="Cole sua chave secreta ou frase semente aqui" />
             </div>
             <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 mt-2 w-full justify-center">
-              <Plus className="w-4 h-4" /> Import Wallet
+              <Plus className="w-4 h-4" /> {t('importarCarteira')}
             </button>
           </form>
         </div>
@@ -326,12 +328,12 @@ export default function WalletsPage() {
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 p-32 bg-indigo-500/5 rounded-full blur-3xl -z-10 -mr-16 -mt-16"></div>
           <h4 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-indigo-400" /> Generate New Wallet
+            <Sparkles className="w-5 h-5 text-indigo-400" /> {t('gerarNovaCarteira')}
           </h4>
-          <p className="text-sm text-slate-400 mb-6">Create a brand new Solana wallet securely. We will generate the 12-word seed phrase and encrypt it in our database automatically.</p>
+          <p className="text-sm text-slate-400 mb-6">Crie uma carteira Solana nova com segurança. Geraremos a frase semente de 12 palavras e a criptografaremos automaticamente no banco.</p>
           <form onSubmit={handleGenerate} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Network</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">{t('rede')}</label>
               <select 
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500"
                 value={generateNetwork}
@@ -342,12 +344,12 @@ export default function WalletsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Acronym</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Apelido</label>
               <input required value={generateAcronym} onChange={e => setGenerateAcronym(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" placeholder="e.g. FLASH_LOAN_BOT" />
             </div>
             <div className="pt-2">
               <button type="submit" className="bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:border-indigo-500 text-white px-4 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 w-full justify-center shadow-lg">
-                <Sparkles className="w-4 h-4 text-indigo-400" /> Generate Wallet Securely
+                <Sparkles className="w-4 h-4 text-indigo-400" /> Gerar Carteira com Segurança
               </button>
             </div>
           </form>
@@ -360,7 +362,7 @@ export default function WalletsPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50">
               <h3 className="font-bold text-white flex items-center gap-2">
-                Deposit to {selectedWallet.acronym}
+                Depositar em {selectedWallet.acronym}
               </h3>
               <button onClick={() => setSelectedWallet(null)} className="text-slate-400 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
@@ -370,7 +372,7 @@ export default function WalletsPage() {
               <div className="bg-white p-3 rounded-xl shadow-sm mb-6">
                 <QRCodeSVG value={selectedWallet.publicKey} size={200} level="M" includeMargin={false} />
               </div>
-              <p className="text-sm text-slate-400 mb-2 font-medium">Solana Address</p>
+              <p className="text-sm text-slate-400 mb-2 font-medium">Endereço Solana</p>
               <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 w-full flex items-center gap-3">
                 <p className="text-xs text-white font-mono break-all flex-1">{selectedWallet.publicKey}</p>
                 <button 
@@ -381,7 +383,7 @@ export default function WalletsPage() {
                 </button>
               </div>
               <p className="text-xs text-center text-slate-500 mt-4">
-                Send only SOL or SPL tokens on the Solana network to this address.
+                Envie apenas SOL ou tokens SPL na rede Solana para este endereço.
               </p>
             </div>
           </div>
@@ -394,7 +396,7 @@ export default function WalletsPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50">
               <h3 className="font-bold text-white flex items-center gap-2">
-                Edit Wallet
+                Editar Carteira
               </h3>
               <button onClick={() => setEditingWallet(null)} className="text-slate-400 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
@@ -402,12 +404,12 @@ export default function WalletsPage() {
             </div>
             <form onSubmit={handleEditSubmit} className="p-6">
               <div className="mb-4">
-                <label className="block text-sm text-slate-400 mb-1">Acronym</label>
+                <label className="block text-sm text-slate-400 mb-1">Apelido</label>
                 <input required value={editAcronym} onChange={e => setEditAcronym(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" placeholder="e.g. FLASH_LOAN_BOT" />
               </div>
-              <p className="text-xs text-slate-500 mb-6">Note: Changing the public or private key is disabled for security reasons. Delete and re-import if necessary.</p>
+              <p className="text-xs text-slate-500 mb-6">Nota: a alteração da chave pública ou privada está desabilitada por segurança. Exclua e reimporte se necessário.</p>
               <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                Save Changes
+                {t('salvarAlteracoes')}
               </button>
             </form>
           </div>
@@ -420,7 +422,7 @@ export default function WalletsPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50">
               <h3 className="font-bold text-white flex items-center gap-2">
-                Send Funds
+                {t('enviarFundos')}
               </h3>
               <button onClick={() => setTransferWallet(null)} className="text-slate-400 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
@@ -440,7 +442,7 @@ export default function WalletsPage() {
 
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">From Wallet</label>
+                  <label className="block text-xs text-slate-500 mb-1">Carteira de Origem</label>
                   <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
                     <p className="text-sm font-medium text-white">{transferWallet.acronym}</p>
                     <p className="text-xs font-mono text-slate-500 break-all">{transferWallet.publicKey}</p>
@@ -448,19 +450,19 @@ export default function WalletsPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Asset</label>
+                  <label className="block text-sm text-slate-400 mb-1">Ativo</label>
                   <select disabled className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none appearance-none opacity-80">
                     <option>Solana (SOL)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Destination Address</label>
-                  <input required value={transferToAddress} onChange={e => setTransferToAddress(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="Paste Solana address" />
+                  <label className="block text-sm text-slate-400 mb-1">Endereço de Destino</label>
+                  <input required value={transferToAddress} onChange={e => setTransferToAddress(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="Cole o endereço Solana" />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Amount</label>
+                  <label className="block text-sm text-slate-400 mb-1">Valor</label>
                   <div className="relative">
                     <input required type="number" step="0.000000001" min="0" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-4 pr-16 py-2 text-white outline-none focus:border-indigo-500" placeholder="0.00" />
                     <div className="absolute right-0 top-0 bottom-0 flex items-center pr-4 pointer-events-none">
@@ -471,12 +473,12 @@ export default function WalletsPage() {
               </div>
 
               <div className="flex justify-between items-center mb-6 text-sm">
-                <span className="text-slate-500">Network Fee</span>
+                <span className="text-slate-500">Taxa da Rede</span>
                 <span className="text-slate-300 font-medium">~0.000005 SOL</span>
               </div>
 
               <button disabled={isTransferring} type="submit" className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:hover:bg-amber-500 text-amber-950 px-4 py-2 rounded-lg font-bold transition-colors flex justify-center items-center gap-2">
-                {isTransferring ? 'Sending...' : 'Confirm Transfer'}
+                {isTransferring ? 'Enviando...' : 'Confirmar Transferência'}
               </button>
             </form>
           </div>

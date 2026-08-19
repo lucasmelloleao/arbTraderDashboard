@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { User, Lock, Key, Shield, QrCode, ShieldOff, Send, MessageSquare, Bot, HelpCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 import clsx from 'clsx';
 import { QRCodeSVG } from 'qrcode.react';
+import { useLanguage } from '@/lib/i18n';
 
 export default function ProfilePage() {
+  const { t } = useLanguage();
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -241,9 +243,9 @@ export default function ProfilePage() {
         setTwoFactorEnabled(true);
         setQrCodeUrl('');
         setTwoFactorToken('');
-        setTwoFactorMessage('2FA enabled successfully!');
+        setTwoFactorMessage('2FA ativado com sucesso!');
       } else {
-        setTwoFactorError(data.error || 'Failed to verify 2FA');
+        setTwoFactorError(data.error || 'Falha ao verificar 2FA');
       }
     } catch (err: any) {
       setTwoFactorError(err.message);
@@ -253,7 +255,7 @@ export default function ProfilePage() {
   };
 
   const disable2FA = async () => {
-    if (!confirm('Are you sure you want to disable 2FA? This will reduce the security of your account.')) return;
+    if (!confirm('Tem certeza que deseja desativar o 2FA? Isso reduzirá a segurança da sua conta.')) return;
     setTwoFactorLoading(true);
     setTwoFactorError('');
     setTwoFactorMessage('');
@@ -265,9 +267,9 @@ export default function ProfilePage() {
       const data = await res.json();
       if (res.ok) {
         setTwoFactorEnabled(false);
-        setTwoFactorMessage('2FA disabled successfully.');
+        setTwoFactorMessage('2FA desativado com sucesso.');
       } else {
-        setTwoFactorError(data.error || 'Failed to disable 2FA');
+        setTwoFactorError(data.error || 'Falha ao desativar 2FA');
       }
     } catch (err: any) {
       setTwoFactorError(err.message);
@@ -280,14 +282,14 @@ export default function ProfilePage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <User className="w-8 h-8 text-indigo-500" />
-        <h1 className="text-2xl font-bold text-white">User Profile</h1>
+        <h1 className="text-2xl font-bold text-white">{t('usuario')}</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
           <div className="flex items-center gap-2 mb-6">
             <Lock className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-medium text-white">Change Password</h2>
+            <h2 className="text-lg font-medium text-white">{t('alterarSenha')}</h2>
           </div>
 
           {error && (
@@ -305,7 +307,7 @@ export default function ProfilePage() {
             {resetStep === 'normal' ? (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-medium text-slate-400">Current Password</label>
+                  <label className="block text-sm font-medium text-slate-400">{t('senhaAtual')}</label>
                   <button
                     type="button"
                     onClick={handleSendResetCode}
@@ -323,7 +325,7 @@ export default function ProfilePage() {
                     value={oldPassword}
                     onChange={(e) => setOldPassword(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-shadow"
-                    placeholder="Enter current password"
+                    placeholder="Digite a senha atual"
                   />
                 </div>
               </div>
@@ -355,7 +357,7 @@ export default function ProfilePage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">New Password</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">{t('novaSenha')}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
@@ -364,13 +366,13 @@ export default function ProfilePage() {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-shadow"
-                  placeholder="Enter new password"
+                  placeholder="Digite a nova senha"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Confirm New Password</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">{t('confirmarSenha')}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
@@ -379,7 +381,7 @@ export default function ProfilePage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-shadow"
-                  placeholder="Confirm new password"
+                  placeholder="Confirme a nova senha"
                 />
               </div>
             </div>
@@ -393,7 +395,7 @@ export default function ProfilePage() {
                   loading && "opacity-70 cursor-not-allowed"
                 )}
               >
-                {loading ? "Updating..." : resetStep === 'code_sent' ? "Redefinir Senha com Código" : "Update Password"}
+                {loading ? "Atualizando..." : resetStep === 'code_sent' ? "Redefinir Senha com Código" : "Alterar Senha"}
               </button>
             </div>
           </form>
@@ -402,7 +404,7 @@ export default function ProfilePage() {
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
           <div className="flex items-center gap-2 mb-6">
             <Shield className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-medium text-white">Two-Factor Authentication (2FA)</h2>
+            <h2 className="text-lg font-medium text-white">{t('autenticacaoDoisFatores')}</h2>
           </div>
 
           {twoFactorError && (
@@ -421,8 +423,8 @@ export default function ProfilePage() {
               <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start gap-3">
                 <Shield className="w-6 h-6 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="text-emerald-500 font-medium mb-1">2FA is Enabled</h3>
-                  <p className="text-sm text-emerald-400/80">Your account is secured with two-factor authentication.</p>
+                  <h3 className="text-emerald-500 font-medium mb-1">{t('habilitado')}</h3>
+                  <p className="text-sm text-emerald-400/80">{t('contaProtegida')}</p>
                 </div>
               </div>
               <button
@@ -431,7 +433,7 @@ export default function ProfilePage() {
                 className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-lg px-4 py-2.5 text-sm font-medium transition-all flex items-center justify-center gap-2 mt-4"
               >
                 <ShieldOff className="w-4 h-4" />
-                {twoFactorLoading ? "Disabling..." : "Disable 2FA"}
+                {twoFactorLoading ? "Desativando..." : t('desativar2FA')}
               </button>
             </div>
           ) : (
@@ -439,14 +441,14 @@ export default function ProfilePage() {
               {!qrCodeUrl ? (
                 <div>
                   <p className="text-sm text-slate-400 mb-6">
-                    Protect your account with an extra layer of security. Once configured, you'll be required to enter both your password and an authentication code from your mobile phone in order to sign in.
+                    Proteja sua conta com uma camada extra de segurança. Após configurado, você precisará inserir sua senha e um código de autenticação do seu celular para entrar.
                   </p>
                   <button
                     onClick={generate2FA}
                     disabled={twoFactorLoading}
                     className="w-full bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-lg px-4 py-2.5 text-sm font-medium transition-all flex items-center justify-center gap-2"
                   >
-                    {twoFactorLoading ? "Generating..." : "Set up 2FA"}
+                    {twoFactorLoading ? "Gerando..." : t('configurar2FA')}
                   </button>
                 </div>
               ) : (
@@ -455,11 +457,11 @@ export default function ProfilePage() {
                     <QRCodeSVG value={qrCodeUrl} size={150} />
                   </div>
                   <p className="text-sm text-slate-400 text-center">
-                    Scan this QR code with your authenticator app (like Google Authenticator or Authy).
+                    Escaneie este QR Code com seu aplicativo autenticador (como Google Authenticator ou Authy).
                   </p>
                   <form onSubmit={verify2FA} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-400 mb-1">Verification Code</label>
+                      <label className="block text-sm font-medium text-slate-400 mb-1">Código de Verificação</label>
                       <div className="relative">
                         <QrCode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                         <input
@@ -478,14 +480,14 @@ export default function ProfilePage() {
                       disabled={twoFactorLoading}
                       className="w-full bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium transition-all hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex items-center justify-center gap-2"
                     >
-                      {twoFactorLoading ? "Verifying..." : "Verify and Enable"}
+                      {twoFactorLoading ? "Verificando..." : "Verificar e Ativar"}
                     </button>
                     <button 
                       type="button"
                       onClick={() => setQrCodeUrl('')}
                       className="w-full mt-2 text-slate-400 hover:text-white text-sm py-2"
                     >
-                      Cancel
+                      {t('cancelar')}
                     </button>
                   </form>
                 </div>

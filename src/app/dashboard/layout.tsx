@@ -6,10 +6,13 @@ import Link from 'next/link';
 import { Wallet, Zap, LayoutDashboard, LogOut, History, Activity, TrendingUp, User, Menu, X, CalendarRange, Terminal, ShieldAlert, ChevronDown, HelpCircle } from 'lucide-react';
 import clsx from 'clsx';
 import HelpModal from '@/components/HelpModal';
+import { useLanguage, LanguageSwitcher } from '@/lib/i18n';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useLanguage();
+ 
   const [user, setUser] = useState<{ name: string, email: string } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -53,15 +56,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  if (!user) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-500">Loading...</div>;
+  if (!user) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-indigo-500">{t('carregando')}</div>;
 
   const links = [
-    { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
-    { href: '/dashboard/perpetual-arb', label: 'Perpetual Arb', icon: TrendingUp },
-    { href: '/dashboard/liquidation', label: 'Liquidação', icon: ShieldAlert },
-    { href: '/dashboard/flash-loan', label: 'Flash Loans', icon: Zap },
-    { href: '/dashboard/exchanges', label: 'Exchanges (CEX/DEX)', icon: Wallet },
-    { href: '/dashboard/exchange-history', label: 'Histórico da Exchange', icon: CalendarRange },
+    { href: '/dashboard', label: t('overview'), icon: LayoutDashboard },
+    { href: '/dashboard/perpetual-arb', label: t('arbitragemFunding'), icon: TrendingUp },
+    { href: '/dashboard/liquidation', label: t('liquidacao'), icon: ShieldAlert },
+    { href: '/dashboard/flash-loan', label: t('flashLoans'), icon: Zap },
+    { href: '/dashboard/exchanges', label: t('exchanges'), icon: Wallet },
+    { href: '/dashboard/exchange-history', label: t('historicoExchange'), icon: CalendarRange },
   ];
 
   return (
@@ -124,10 +127,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               isCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5",
               "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
             )}
-            title={isCollapsed ? 'Ajuda' : undefined}
+            title={isCollapsed ? t('ajuda') : undefined}
           >
             <HelpCircle className="w-5 h-5 shrink-0 text-slate-500 group-hover:text-slate-300" />
-            {!isCollapsed && <span className="truncate">Ajuda</span>}
+            {!isCollapsed && <span className="truncate">{t('ajuda')}</span>}
           </button>
         </nav>
       </aside>
@@ -148,11 +151,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h2 className="text-lg font-medium text-white">Dashboard</h2>
+            <h2 className="text-lg font-medium text-white">{t('dashboard')}</h2>
           </div>
 
-          {/* User Top Navbar Menu */}
-          <div className="relative" ref={userMenuRef}>
+          {/* Language + User Top Navbar Menu */}
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher compact />
+            <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-slate-800/60 border border-transparent hover:border-slate-800 transition-all group"
@@ -182,7 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/70 transition-colors"
                   >
                     <User className="w-4 h-4 text-indigo-400 shrink-0" />
-                    <span>Profile</span>
+                    <span>{t('perfil')}</span>
                   </Link>
                 </div>
 
@@ -192,7 +197,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/70 transition-colors"
                   >
                     <HelpCircle className="w-4 h-4 text-indigo-400 shrink-0" />
-                    <span>Ajuda</span>
+                    <span>{t('ajuda')}</span>
                   </button>
                 </div>
 
@@ -202,11 +207,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
                   >
                     <LogOut className="w-4 h-4 shrink-0" />
-                    <span>Sign Out</span>
+                    <span>{t('sair')}</span>
                   </button>
                 </div>
               </div>
             )}
+            </div>
           </div>
         </header>
         <div className="flex-1 overflow-y-auto p-4 md:p-6">

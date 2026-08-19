@@ -2,9 +2,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, Mail, User, ShieldCheck, KeyRound, ArrowLeft } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n';
 
 export default function Login() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -286,7 +288,7 @@ export default function Login() {
               <>
                 {!isLogin && (
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Name</label>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">{t('nome')}</label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                       <input
@@ -302,7 +304,7 @@ export default function Login() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">{t('email')}</label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                     <input
@@ -318,7 +320,7 @@ export default function Login() {
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="block text-sm font-medium text-slate-400">Password</label>
+                    <label className="block text-sm font-medium text-slate-400">{t('senha')}</label>
                     {isLogin && (
                       <button
                         type="button"
@@ -344,7 +346,7 @@ export default function Login() {
               </>
             ) : (
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">2FA Authenticator Code</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">{t('codigo2FA')}</label>
                 <div className="relative">
                   <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500" />
                   <input
@@ -362,7 +364,7 @@ export default function Login() {
                   onClick={() => { setShow2fa(false); setTwoFactorToken(''); setError(''); }}
                   className="mt-2 text-xs text-slate-400 hover:text-white"
                 >
-                  Back to Login
+                  {t('voltarAoLogin')}
                 </button>
               </div>
             )}
@@ -371,11 +373,10 @@ export default function Login() {
               type="submit"
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors mt-6"
             >
-              {show2fa ? 'Verify 2FA & Login' : (isLogin ? 'Sign In' : 'Create Account')}
+              {show2fa ? t('verificar2FA') : (isLogin ? t('entrar') : t('criarConta'))}
             </button>
           </form>
         )}
-
         {!show2fa && !forgotPasswordStep && (
           <>
             <div className="relative my-6">
@@ -383,7 +384,7 @@ export default function Login() {
                 <div className="w-full border-t border-slate-800"></div>
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-slate-900 px-2 text-slate-500">Or continue with</span>
+                <span className="bg-slate-900 px-2 text-slate-500">{t('ouContinueCom')}</span>
               </div>
             </div>
 
@@ -392,13 +393,13 @@ export default function Login() {
             </div>
 
             <div className="mt-6 text-center text-sm text-slate-400">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              {isLogin ? t('naoTemConta') : t('jaTemConta')}
               <button
                 type="button"
                 onClick={() => { setIsLogin(!isLogin); setError(''); setSuccessMessage(''); }}
                 className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
               >
-                {isLogin ? 'Sign up' : 'Log in'}
+                {isLogin ? t('cadastrar') : t('entrarAgora')}
               </button>
             </div>
           </>

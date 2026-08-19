@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { RefreshCw, CalendarRange } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n';
 import {
   AreaChart,
   Area,
@@ -15,6 +16,7 @@ import {
 } from 'recharts';
 
 export default function DashboardOverview() {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -319,8 +321,8 @@ export default function DashboardOverview() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-2xl font-bold text-white">Overview — Arbitragem CEX</h3>
-          <p className="text-slate-400 text-sm">Resumo patrimonial e saldos das corretoras centralizadas</p>
+          <h3 className="text-2xl font-bold text-white">{t('overviewArbitragem')}</h3>
+          <p className="text-slate-400 text-sm">{t('resumoPatrimonial')}</p>
         </div>
                         <div className="flex items-center gap-3">
           <Link
@@ -328,7 +330,7 @@ export default function DashboardOverview() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-lg transition-all"
           >
             <CalendarRange className="h-3.5 w-3.5" />
-            Histórico da Exchange
+            {t('historicoExchange')}
           </Link>
           <button
             onClick={async () => {
@@ -341,7 +343,7 @@ export default function DashboardOverview() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-all disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Atualizando...' : 'Atualizar Saldos'}
+            {refreshing ? t('atualizando') : t('atualizarSaldos')}
           </button>
         </div>
       </div>
@@ -350,39 +352,39 @@ export default function DashboardOverview() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm flex flex-col justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-400 mb-1">Corretoras Conectadas</p>
+            <p className="text-sm font-medium text-slate-400 mb-1">{t('corretorasConectadas')}</p>
             <p className="text-3xl font-bold text-white">
               {loading ? '...' : cexBalances.length}
             </p>
           </div>
           <p className="text-xs text-slate-400 font-mono mt-2 pt-2 border-t border-slate-800/80">
-            Patrimônio Global: <strong className="text-white font-bold">{loading ? '...' : `$${(totalCexUsd || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
+            {t('patrimonioGlobal')}: <strong className="text-white font-bold">{loading ? '...' : `$${(totalCexUsd || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
           </p>
         </div>
 
         <div className="bg-slate-900 border border-emerald-500/20 p-6 rounded-xl shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent"></div>
           <div>
-            <p className="text-sm font-medium text-emerald-400 mb-1">🟢 Saldo Total Spot (CEX)</p>
+            <p className="text-sm font-medium text-emerald-400 mb-1">🟢 {t('saldoTotalSpot')}</p>
             <p className="text-3xl font-bold text-emerald-300">
               {loading ? '...' : `$${totalSpotUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </p>
           </div>
           <p className="text-xs text-emerald-400/80 font-mono mt-2 pt-2 border-t border-emerald-500/10 relative z-10">
-            Disponível em USDT: <strong className="text-emerald-300 font-bold">{loading ? '...' : `$${spotUsdtOnly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
+            {t('disponivelEm')}: <strong className="text-emerald-300 font-bold">{loading ? '...' : `$${spotUsdtOnly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
           </p>
         </div>
 
         <div className="bg-slate-900 border border-indigo-500/20 p-6 rounded-xl shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent"></div>
           <div>
-            <p className="text-sm font-medium text-indigo-400 mb-1">🟣 Saldo Total Futuros (CEX)</p>
+            <p className="text-sm font-medium text-indigo-400 mb-1">🟣 {t('saldoTotalFuturos')}</p>
             <p className="text-3xl font-bold text-indigo-300">
               {loading ? '...' : `$${totalFuturesUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </p>
           </div>
           <p className="text-xs text-indigo-400/80 font-mono mt-2 pt-2 border-t border-indigo-500/10 relative z-10">
-            Disponível em USDT: <strong className="text-indigo-300 font-bold">{loading ? '...' : `$${futuresUsdtOnly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
+            {t('disponivelEm')}: <strong className="text-indigo-300 font-bold">{loading ? '...' : `$${futuresUsdtOnly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}</strong>
           </p>
         </div>
       </div>
@@ -390,19 +392,19 @@ export default function DashboardOverview() {
       {/* Gráfico de Evolução Patrimonial Duplo (Spot vs Futuros) */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-white">📈 Evolução Patrimonial (Spot vs Futuros)</h3>
+          <h3 className="text-xl font-bold text-white">📈 {t('evolucaoPatrimonial')}</h3>
           <div className="flex items-center gap-4 text-xs font-medium">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-              <span className="text-slate-300">Saldo Spot</span>
+              <span className="text-slate-300">{t('saldoSpot')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-indigo-500 inline-block"></span>
-              <span className="text-slate-300">Saldo Futuros</span>
+              <span className="text-slate-300">{t('saldoFuturos')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-0.5 bg-amber-400 inline-block"></span>
-              <span className="text-slate-300">Total (Perp + Spot)</span>
+              <span className="text-slate-300">{t('totalPerpSpot')}</span>
             </div>
           </div>
         </div>
@@ -472,7 +474,7 @@ export default function DashboardOverview() {
               </ResponsiveContainer>
             ) : (
               <div className="flex justify-center items-center h-full">
-                <p className="text-slate-500">Nenhum histórico registrado ainda.</p>
+                <p className="text-slate-500">{t('nenhumHistorico')}</p>
               </div>
             )}
           </div>
@@ -482,10 +484,10 @@ export default function DashboardOverview() {
       {/* Quadro: Moedas Spot (quantidade + valor USD) */}
       <div>
                         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-white">🪙 Moedas Spot — Quantidade e Valor</h3>
+          <h3 className="text-xl font-bold text-white">🪙 {t('moedasSpot')}</h3>
           {lastSnapshotAt && (
             <span className="text-xs text-slate-500 font-mono">
-              Atualizado: {new Date(lastSnapshotAt).toLocaleString()}
+              {t('atualizado')}: {new Date(lastSnapshotAt).toLocaleString()}
             </span>
           )}
         </div>
@@ -501,8 +503,7 @@ export default function DashboardOverview() {
                   { label: 'Valor (USD)', key: 'usdValue', right: true },
                   { label: 'Lucro/Prejuízo', key: 'pnl', right: true },
                   { label: '% do Spot', key: 'pct', right: true },
-                ].map((col) => (
-                  <th
+                ].map((col) => (                  <th
                     key={col.key}
                     onClick={() => toggleSort(setSpotSort, col.key, spotSort)}
                     className={`px-6 py-4 font-medium cursor-pointer select-none hover:text-white transition-colors ${col.right ? 'text-right' : ''}`}
@@ -521,11 +522,11 @@ export default function DashboardOverview() {
             <tbody className="divide-y divide-slate-800">
                             {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">Carregando moedas spot...</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">{t('carregandoMoedas')}</td>
                 </tr>
               ) : spotCoins.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">Nenhuma moeda spot encontrada no snapshot.</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">{t('nenhumaMoeda')}</td>
                 </tr>
                             ) : (
                 sortedSpotCoins.map((coin: any, idx: number) => {
@@ -603,9 +604,9 @@ export default function DashboardOverview() {
       {/* Quadro: Posições Futuras Abertas */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-white">📊 Posições Futuras Abertas</h3>
+          <h3 className="text-xl font-bold text-white">📊 {t('posicoesFuturas')}</h3>
           <span className={`text-sm font-mono font-semibold ${futuresUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            PnL Não Realizado: {futuresUnrealizedPnl >= 0 ? '+' : ''}${futuresUnrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {t('pnlNaoRealizado')}: {futuresUnrealizedPnl >= 0 ? '+' : ''}${futuresUnrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto shadow-sm">
@@ -642,11 +643,11 @@ export default function DashboardOverview() {
             <tbody className="divide-y divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-slate-500">Carregando posições futuras...</td>
+                  <td colSpan={9} className="px-6 py-8 text-center text-slate-500">{t('carregandoPosicoes')}</td>
                 </tr>
               ) : futuresPositions.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-slate-500">Nenhuma posição futura aberta.</td>
+                  <td colSpan={9} className="px-6 py-8 text-center text-slate-500">{t('nenhumaPosicao')}</td>
                 </tr>
                             ) : (
                 sortedFuturesPositions.map((pos: any, idx: number) => {
@@ -723,7 +724,7 @@ export default function DashboardOverview() {
 
       {/* Tabela Connected Exchanges Balances */}
       <div>
-        <h3 className="text-xl font-bold text-white mb-4">🏦 Connected Exchanges Balances</h3>
+        <h3 className="text-xl font-bold text-white mb-4">🏦 {t('corretorasConectadasBalances')}</h3>
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto shadow-sm">
           <table className="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
             <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400">
@@ -737,11 +738,11 @@ export default function DashboardOverview() {
             <tbody className="divide-y divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-slate-500">Carregando saldos das corretoras...</td>
+                  <td colSpan={4} className="px-6 py-8 text-center text-slate-500">{t('carregandoSaldos')}</td>
                 </tr>
               ) : cexBalances.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-slate-500">Nenhuma corretora conectada.</td>
+                  <td colSpan={4} className="px-6 py-8 text-center text-slate-500">{t('nenhumaCorretoraConectada')}</td>
                 </tr>
               ) : (
                 cexBalances.map((ex, idx) => {

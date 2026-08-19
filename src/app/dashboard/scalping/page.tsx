@@ -283,15 +283,15 @@ export default function ScalpingPage() {
       {stats && (
         <div className="mb-8">
           <h4 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-emerald-500" /> Performance Overview
+            <TrendingUp className="w-5 h-5 text-emerald-500" /> Visão Geral de Performance
           </h4>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-              <p className="text-sm text-slate-400 mb-1">Total Operations</p>
+              <p className="text-sm text-slate-400 mb-1">Total de Operações</p>
               <p className="text-2xl font-bold text-white">{stats.totalOperations}</p>
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-              <p className="text-sm text-slate-400 mb-1">Success / Failed</p>
+              <p className="text-sm text-slate-400 mb-1">Sucesso / Falhas</p>
               <div className="flex items-center gap-2">
                 <p className="text-2xl font-bold text-emerald-400">{stats.successfulOperations}</p>
                 <span className="text-slate-600">/</span>
@@ -299,7 +299,7 @@ export default function ScalpingPage() {
               </div>
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-              <p className="text-sm text-slate-400 mb-1">Net Accumulated PnL</p>
+              <p className="text-sm text-slate-400 mb-1">PnL Líquido Acumulado</p>
               <div className="flex flex-col">
                 <p className={clsx("text-2xl font-bold", stats.totalPnlPercentage >= 0 ? "text-emerald-400" : "text-red-400")}>
                   {stats.totalPnlPercentage > 0 ? '+' : ''}{stats.totalPnlPercentage.toFixed(4)}%
@@ -312,10 +312,10 @@ export default function ScalpingPage() {
               </div>
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm overflow-y-auto max-h-[88px] custom-scrollbar">
-              <p className="text-sm text-slate-400 mb-2">PnL by Symbol</p>
+              <p className="text-sm text-slate-400 mb-2">PnL por Símbolo</p>
               <div className="space-y-1">
                 {Object.keys(stats.profitBySymbol || {}).length === 0 ? (
-                  <p className="text-xs text-slate-500">No data</p>
+                  <p className="text-xs text-slate-500">Sem dados</p>
                 ) : (
                   Object.entries(stats.statsBySymbol || {}).map(([sym, data]: [string, any]) => {
                     const winRate = data.totalTrades > 0 ? (data.successfulTrades / data.totalTrades) * 100 : 0;
@@ -341,7 +341,7 @@ export default function ScalpingPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {strategies.length === 0 ? (
           <div className="col-span-full p-8 border border-dashed border-slate-700 rounded-xl text-center text-slate-500">
-            No scalping strategies configured. Add one below to start trading.
+            Nenhuma estratégia de scalping configurada. Adicione uma abaixo para começar a operar.
           </div>
         ) : strategies.map(strat => {
           const isTrading = trades.some(t => t.strategyId?._id === strat._id && t.status === 'in_position');
@@ -468,7 +468,7 @@ export default function ScalpingPage() {
             
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-4 mt-4">
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">Trade Size</p>
+                <p className="text-xs text-slate-500 mb-1">Tamanho da Ordem</p>
                 <p className="text-sm font-semibold text-emerald-400">${strat.tradeSize.toLocaleString()}</p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
@@ -480,11 +480,11 @@ export default function ScalpingPage() {
                 <p className="text-sm font-semibold text-red-400">-{strat.stopLossPercentage}%</p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">Max Time</p>
+                <p className="text-xs text-slate-500 mb-1">Tempo Máx.</p>
                 <p className="text-sm font-semibold text-orange-400">{(strat.maxPositionTimeMs / 1000).toFixed(0)}s</p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">Max Spread</p>
+                <p className="text-xs text-slate-500 mb-1">Spread Máx.</p>
                 <p className="text-sm font-semibold text-purple-400">{strat.maxSpreadPercentage ?? 0.1}%</p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
@@ -492,11 +492,11 @@ export default function ScalpingPage() {
                 <p className="text-sm font-semibold text-indigo-400">{strat.bufferPercentage}%</p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">Daily Loss Limit</p>
-                <p className="text-sm font-semibold text-red-400">{strat.dailyLossLimit > 0 ? `$${strat.dailyLossLimit}` : 'Disabled'}</p>
+                <p className="text-xs text-slate-500 mb-1">Limite de Perda Diária</p>
+                <p className="text-sm font-semibold text-red-400">{strat.dailyLossLimit > 0 ? `$${strat.dailyLossLimit}` : 'Desativado'}</p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">Loss Cooldown</p>
+                <p className="text-xs text-slate-500 mb-1">Cooldown de Perda</p>
                 <p className="text-sm font-semibold text-cyan-400">{((strat.postLossCooldownMs || 300000) / 60000).toFixed(0)}min</p>
               </div>
             </div>
@@ -508,18 +508,18 @@ export default function ScalpingPage() {
       {isFormOpen && (
       <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm max-w-2xl">
         <h4 className="text-lg font-medium text-white mb-6 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-indigo-500" /> Configure New CEX Scalping Strategy
+          <Settings className="w-5 h-5 text-indigo-500" /> Configurar Nova Estratégia de Scalping CEX
         </h4>
         <form onSubmit={handleAdd} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Strategy Name</label>
+              <label className="block text-sm text-slate-400 mb-1">Nome da Estratégia</label>
               <input required value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" placeholder="e.g. MEXC SOL Scalp" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Exchange Connection</label>
+              <label className="block text-sm text-slate-400 mb-1">Conexão da Corretora</label>
               <select required value={selectedExchangeKeyId} onChange={e => setSelectedExchangeKeyId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-                {exchangeKeys.length === 0 ? <option value="">No exchange keys registered</option> : null}
+                {exchangeKeys.length === 0 ? <option value="">Nenhuma chave de corretora registrada</option> : null}
                 {exchangeKeys.map(w => (
                   <option key={w._id} value={w._id}>{w.name} ({w.exchangeId.toUpperCase()})</option>
                 ))}
@@ -528,13 +528,13 @@ export default function ScalpingPage() {
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Trading Pair Symbol</label>
+            <label className="block text-sm text-slate-400 mb-1">Símbolo do Par de Negociação</label>
             <input required type="text" value={symbol} onChange={e => setSymbol(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="e.g. SOL/USDT" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Trade Size</label>
+              <label className="block text-sm text-slate-400 mb-1">Tamanho da Ordem</label>
               <input required type="number" value={tradeSize} onChange={e => setTradeSize(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="100" />
             </div>
             <div>
@@ -542,7 +542,7 @@ export default function ScalpingPage() {
               <input required type="number" step="0.01" value={takeProfitPercentage} onChange={e => setTakeProfitPercentage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="0.08" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Max Spread (%)</label>
+              <label className="block text-sm text-slate-400 mb-1">Spread Máx. (%)</label>
               <input required type="number" step="0.01" value={maxSpreadPercentage} onChange={e => setMaxSpreadPercentage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="0.1" />
             </div>
             <div>
@@ -550,25 +550,25 @@ export default function ScalpingPage() {
               <input required type="number" step="0.01" value={stopLossPercentage} onChange={e => setStopLossPercentage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="0.05" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Max Position Time (ms)</label>
+              <label className="block text-sm text-slate-400 mb-1">Tempo Máx. de Posição (ms)</label>
               <input required type="number" step="100" value={maxPositionTimeMs} onChange={e => setMaxPositionTimeMs(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="30000" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Slippage Buffer (%)</label>
+              <label className="block text-sm text-slate-400 mb-1">Buffer de Slippage (%)</label>
               <input required type="number" step="0.01" value={bufferPercentage} onChange={e => setBufferPercentage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="0.01" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Daily Loss Limit ($) <span className="text-slate-600">(0 = off)</span></label>
+              <label className="block text-sm text-slate-400 mb-1">Limite de Perda Diária ($) <span className="text-slate-600">(0 = desativado)</span></label>
               <input type="number" step="1" value={dailyLossLimit} onChange={e => setDailyLossLimit(e.target.value)} className="w-full bg-slate-950 border border-red-900/50 rounded-lg px-4 py-2 text-white outline-none focus:border-red-500 font-mono" placeholder="0" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Post-Loss Cooldown (ms)</label>
+              <label className="block text-sm text-slate-400 mb-1">Cooldown Pós-Perda (ms)</label>
               <input type="number" step="1000" value={postLossCooldownMs} onChange={e => setPostLossCooldownMs(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="300000" />
             </div>
           </div>
 
           <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mt-4">
-            <Plus className="w-5 h-5" /> Deploy CEX Scalping Strategy
+            <Plus className="w-5 h-5" /> Implantar Estratégia de Scalping CEX
           </button>
         </form>
       </div>
@@ -578,36 +578,36 @@ export default function ScalpingPage() {
       <div className="mt-8 bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h4 className="text-lg font-medium text-white flex items-center gap-2">
-            <Activity className="w-5 h-5 text-indigo-500" /> Recent Scalping Operations
+            <Activity className="w-5 h-5 text-indigo-500" /> Operações de Scalping Recentes
           </h4>
           {trades.length > 0 && (
             <button 
               onClick={handleDeleteAllTrades}
               className="text-xs flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors"
-              title="Delete all trade logs"
+              title="Apagar todos os logs de trades"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Clear Logs
+              Limpar Logs
             </button>
           )}
         </div>
         
         {trades.length === 0 ? (
           <div className="p-8 border border-dashed border-slate-700 rounded-xl text-center text-slate-500">
-            No operations found. Start a strategy to see trades here.
+            Nenhuma operação encontrada. Inicie uma estratégia para ver os trades aqui.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-slate-400 uppercase bg-slate-950 border-b border-slate-800">
                 <tr>
-                  <th className="px-4 py-3">Time</th>
-                  <th className="px-4 py-3">Strategy</th>
-                  <th className="px-4 py-3">Symbol</th>
-                  <th className="px-4 py-3">Size</th>
+                  <th className="px-4 py-3">Horário</th>
+                  <th className="px-4 py-3">Estratégia</th>
+                  <th className="px-4 py-3">Símbolo</th>
+                  <th className="px-4 py-3">Tamanho</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Entry</th>
-                  <th className="px-4 py-3 text-right">Exit</th>
+                  <th className="px-4 py-3 text-right">Entrada</th>
+                  <th className="px-4 py-3 text-right">Saída</th>
                   <th className="px-4 py-3 text-right">PnL</th>
                 </tr>
               </thead>
@@ -646,10 +646,10 @@ export default function ScalpingPage() {
                       {trade.amount}
                     </td>
                     <td className="px-4 py-3">
-                      {trade.status === 'success' && <span className="text-emerald-400 text-xs font-bold uppercase bg-emerald-500/10 px-2 py-0.5 rounded">Success</span>}
-                      {trade.status === 'failed' && <span className="text-red-400 text-xs font-bold uppercase bg-red-500/10 px-2 py-0.5 rounded" title={trade.errorMessage}>Failed</span>}
-                      {trade.status === 'in_position' && <span className="text-sky-400 text-xs font-bold uppercase bg-sky-500/10 px-2 py-0.5 rounded animate-pulse">In Position</span>}
-                      {trade.status === 'pending' && <span className="text-slate-400 text-xs font-bold uppercase bg-slate-500/10 px-2 py-0.5 rounded">Pending</span>}
+                      {trade.status === 'success' && <span className="text-emerald-400 text-xs font-bold uppercase bg-emerald-500/10 px-2 py-0.5 rounded">Sucesso</span>}
+                      {trade.status === 'failed' && <span className="text-red-400 text-xs font-bold uppercase bg-red-500/10 px-2 py-0.5 rounded" title={trade.errorMessage}>Falhou</span>}
+                      {trade.status === 'in_position' && <span className="text-sky-400 text-xs font-bold uppercase bg-sky-500/10 px-2 py-0.5 rounded animate-pulse">Em Posição</span>}
+                      {trade.status === 'pending' && <span className="text-slate-400 text-xs font-bold uppercase bg-slate-500/10 px-2 py-0.5 rounded">Pendente</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-300 font-mono">
                       {trade.entryPrice ? `$${trade.entryPrice.toFixed(4)}` : '-'}

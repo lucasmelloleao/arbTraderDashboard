@@ -404,9 +404,9 @@ export default function FlashLoanPage() {
         <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-4 shadow-sm">
           <AlertTriangle className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
           <div>
-            <h4 className="text-red-400 font-bold mb-1">Bot Engine is Paused</h4>
+            <h4 className="text-red-400 font-bold mb-1">Motor do Bot Pausado</h4>
             <p className="text-red-200/80 text-sm">
-              Your Flash Loan strategies are not running. To start scanning for arbitrage, please run the command <code className="bg-red-950/50 px-1.5 py-0.5 rounded text-red-300 font-mono">npm run start:monitor</code> in sua pasta flash-go no terminal.
+              Suas estratégias de Flash Loan não estão rodando. Para começar a varrer em busca de arbitragem, execute o comando <code className="bg-red-950/50 px-1.5 py-0.5 rounded text-red-300 font-mono">npm run start:monitor</code> na pasta flash-go do terminal.
             </p>
           </div>
         </div>
@@ -415,7 +415,7 @@ export default function FlashLoanPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {strategies.length === 0 ? (
           <div className="col-span-full p-8 border border-dashed border-slate-700 rounded-xl text-center text-slate-500">
-            No strategies configured. Add one below to start scanning for arbitrage.
+            Nenhuma estratégia configurada. Adicione uma abaixo para começar a varrer em busca de arbitragem.
           </div>
         ) : strategies.map(strat => (
           <div key={strat._id} className={clsx("bg-slate-900 border rounded-xl p-5 shadow-sm transition-colors", strat.active ? "border-emerald-500/50 shadow-emerald-500/10" : "border-slate-800 hover:border-slate-700")}>
@@ -454,34 +454,34 @@ export default function FlashLoanPage() {
             
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">Borrow Size</p>
+                <p className="text-xs text-slate-500 mb-1">Tamanho do Empréstimo</p>
                 <p className="text-sm font-semibold text-emerald-400">${strat.borrowAmount.toLocaleString()} {getDisplaySymbol(strat.tokenAMint)}</p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">Network</p>
+                <p className="text-xs text-slate-500 mb-1">Rede</p>
                 <p className="text-sm font-semibold text-white capitalize">
                   {strat.network || 'solana'}
                 </p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">Lending Prov.</p>
+                <p className="text-xs text-slate-500 mb-1">Provedor de Empréstimo</p>
                 <p className="text-sm font-semibold text-indigo-400 capitalize">
                   {strat.lendingProvider === 'kamino' ? 'Kamino' : strat.lendingProvider === 'none' ? 'Recursos PrÃ³prios' : strat.lendingProvider} 
                 </p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">DEX Prov.</p>
+                <p className="text-xs text-slate-500 mb-1">Provedor DEX</p>
                 <p className="text-sm font-semibold text-sky-400 capitalize">
                   {strat.provider}
                 </p>
               </div>
               <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-                <p className="text-xs text-slate-500 mb-1">MEV Protection</p>
+                <p className="text-xs text-slate-500 mb-1">Proteção MEV</p>
                 <p className="text-sm font-semibold text-white">
                   {strat.mevProtection ? (
-                    <span className="text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3" /> {(strat.network || 'solana') === 'solana' ? 'Jito Active' : 'Flashbots Active'}</span>
+                    <span className="text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3" /> {(strat.network || 'solana') === 'solana' ? 'Jito Ativo' : 'Flashbots Ativo'}</span>
                   ) : (
-                    <span className="text-rose-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Disabled</span>
+                    <span className="text-rose-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Desativado</span>
                   )}
                 </p>
               </div>
@@ -493,12 +493,12 @@ export default function FlashLoanPage() {
       {isFormOpen && (
       <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm max-w-2xl">
         <h4 className="text-lg font-medium text-white mb-6 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-indigo-500" /> Configure New Strategy
+          <Settings className="w-5 h-5 text-indigo-500" /> Configurar Nova Estratégia
         </h4>
         <form onSubmit={handleAdd} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Network</label>
+              <label className="block text-sm text-slate-400 mb-1">Rede</label>
               <select value={network} onChange={e => {
                 const newNet = e.target.value;
                 setNetwork(newNet);
@@ -511,29 +511,29 @@ export default function FlashLoanPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Strategy Name</label>
+              <label className="block text-sm text-slate-400 mb-1">Nome da Estratégia</label>
               <input required value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" placeholder="e.g. USDC/SOL Arb" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             {network === 'solana' ? (
               <div>
-                <label className="block text-sm text-slate-400 mb-1">DEX Provider</label>
+                <label className="block text-sm text-slate-400 mb-1">Provedor DEX</label>
                 <select value={provider} onChange={e => setProvider(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-                  <option value="jupiter">Jupiter (Default)</option>
+                  <option value="jupiter">Jupiter (Padrão)</option>
                   <option value="raptor">Raptor API</option>
                 </select>
               </div>
             ) : (
               <div>
-                <label className="block text-sm text-slate-400 mb-1">DEX Providers</label>
-                <input disabled value="Auto-Routing (All DEXes)" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2 text-slate-500 outline-none cursor-not-allowed" />
+                <label className="block text-sm text-slate-400 mb-1">Provedores DEX</label>
+                <input disabled value="Auto-Routing (Todas as DEXes)" className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2 text-slate-500 outline-none cursor-not-allowed" />
               </div>
             )}
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Execution Wallet</label>
+              <label className="block text-sm text-slate-400 mb-1">Carteira de Execução</label>
               <select required value={selectedWalletId} onChange={e => setSelectedWalletId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
-                {wallets.length === 0 ? <option value="">No wallets registered</option> : null}
+                {wallets.length === 0 ? <option value="">Nenhuma carteira registrada</option> : null}
                 {wallets.map(w => (
                   <option key={w._id} value={w._id}>{w.acronym} - {w.publicKey.substring(0,6)}...{w.publicKey.substring(w.publicKey.length-4)}</option>
                 ))}
@@ -543,11 +543,11 @@ export default function FlashLoanPage() {
           
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="block text-sm text-slate-400 mb-1">Lending Provider</label>
+              <label className="block text-sm text-slate-400 mb-1">Provedor de Empréstimo</label>
               <select value={lendingProvider} onChange={e => setLendingProvider(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
                 {network === 'solana' ? (
                   <>
-                    <option value="solend">Solend (Main Pool)</option>
+                    <option value="solend">Solend (Pool Principal)</option>
                     <option value="kamino">Kamino Finance (K-Lend)</option>
                     <option value="none">Recursos PrÃ³prios (Sem Flash Loan)</option>
                   </>
@@ -563,22 +563,22 @@ export default function FlashLoanPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Base Token (Symbol or Address)</label>
+              <label className="block text-sm text-slate-400 mb-1">Token Base (Símbolo ou Endereço)</label>
               <input required value={tokenAMint} onChange={e => setTokenAMint(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="e.g. USDC or 0x..." />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Target Token (Symbol or Address)</label>
+              <label className="block text-sm text-slate-400 mb-1">Token Alvo (Símbolo ou Endereço)</label>
               <input required value={tokenBMint} onChange={e => setTokenBMint(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="e.g. WETH or 0x..." />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Borrow Amount ({KNOWN_TOKENS.find(t => t.mint === tokenAMint)?.symbol || 'USDC'})</label>
+              <label className="block text-sm text-slate-400 mb-1">Valor do Empréstimo ({KNOWN_TOKENS.find(t => t.mint === tokenAMint)?.symbol || 'USDC'})</label>
               <input required type="number" value={borrowAmount} onChange={e => setBorrowAmount(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="100" />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Min. Profit ({KNOWN_TOKENS.find(t => t.mint === tokenAMint)?.symbol || 'USDC'})</label>
+              <label className="block text-sm text-slate-400 mb-1">Lucro Mín. ({KNOWN_TOKENS.find(t => t.mint === tokenAMint)?.symbol || 'USDC'})</label>
               <input required type="number" step="0.01" value={minProfitUsdc} onChange={e => setMinProfitUsdc(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono" placeholder="0" />
             </div>
           </div>
@@ -595,18 +595,18 @@ export default function FlashLoanPage() {
             </div>
             <div>
               <label htmlFor="mevProtection" className="block text-sm font-medium text-white mb-1 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-emerald-400" /> Private RPC / MEV Protection
+                <Zap className="w-4 h-4 text-emerald-400" /> RPC Privada / Proteção MEV
               </label>
               <p className="text-xs text-slate-400">
-                Routes transactions through a private RPC (like Jito Block Engine). 
-                Protects against frontrunning and failed transaction gas fees. 
-                <span className="text-emerald-400 ml-1">Highly Recommended.</span>
+                Roteia transações por uma RPC privada (como Jito Block Engine). 
+                Protege contra frontrunning e taxas de gás de transações falhas. 
+                <span className="text-emerald-400 ml-1">Altamente Recomendado.</span>
               </p>
             </div>
           </div>
 
           <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mt-4">
-            <Plus className="w-5 h-5" /> Deploy Strategy
+            <Plus className="w-5 h-5" /> Implantar Estratégia
           </button>
         </form>
       </div>
@@ -614,25 +614,25 @@ export default function FlashLoanPage() {
 
       <div className="mt-8 bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm">
         <h4 className="text-lg font-medium text-white mb-6 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-indigo-500" /> Recent Arbitrage Operations
+          <Activity className="w-5 h-5 text-indigo-500" /> Operações de Arbitragem Recentes
         </h4>
         
         {trades.length === 0 ? (
           <div className="p-8 border border-dashed border-slate-700 rounded-xl text-center text-slate-500">
-            No operations found. Deployed strategies will record executed trades here.
+            Nenhuma operação encontrada. Estratégias implantadas registrarão os trades executados aqui.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-slate-400 uppercase bg-slate-950 border-b border-slate-800">
                 <tr>
-                  <th className="px-4 py-3">Time</th>
-                  <th className="px-4 py-3">Borrowed</th>
-                  <th className="px-4 py-3">Fee</th>
-                  <th className="px-4 py-3">Expected Profit</th>
-                  <th className="px-4 py-3">Actual Profit</th>
+                  <th className="px-4 py-3">Horário</th>
+                  <th className="px-4 py-3">Emprestado</th>
+                  <th className="px-4 py-3">Taxa</th>
+                  <th className="px-4 py-3">Lucro Esperado</th>
+                  <th className="px-4 py-3">Lucro Real</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Explorer</th>
+                  <th className="px-4 py-3 text-right">Explorador</th>
                 </tr>
               </thead>
               <tbody>

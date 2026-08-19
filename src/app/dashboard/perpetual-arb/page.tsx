@@ -580,12 +580,14 @@ export default function PerpetualArbPage() {
             <Search className="h-4 w-4" /> Busca Manual Cross-Exchange
           </button>
           */}
+          {/* TODO: reativar quando implementado
           <button
             onClick={() => { fetchStrategies(); fetchTrades(); fetchSettings(); fetchBalances(); fetchLivePositions(); }}
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition-colors shadow-lg"
           >
             <RefreshCw className="h-4 w-4" /> Atualizar
           </button>
+          */}
           {/* TODO: reativar quando implementado
           <button
             onClick={() => setShowForm({ mode: 'create' })}
