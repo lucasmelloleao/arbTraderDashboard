@@ -44,8 +44,9 @@ const steps = [
     color: 'text-emerald-400',
     body: (
       <>
-        <p>O robô opera com <strong>USDT</strong> (também aceita USDC). Faça o depósito na corretora conectada e <strong>transfira o saldo para as contas Spot e Futuros</strong> (ambas as pernas da operação precisam de saldo).</p>
-        <p className="mt-2">💰 O robô precisa de USDT disponível nas duas contas para abrir o hedge (Long no Spot + Short no Perpétuo).</p>
+        <p>O robô opera com <strong>USDT</strong> (também aceita USDC). Faça o depósito <strong>somente na conta Spot</strong> da corretora conectada.</p>
+        <p className="mt-2">🔄 <strong>Não precisa transferir nada para Futuros.</strong> O robô faz o rateio automaticamente: antes de abrir o hedge, ele equilibra o saldo entre Spot e Futuros (transferência interna), usando metade do saldo livre em cada conta.</p>
+        <p className="mt-2">💰 Com o saldo todo no Spot, o robô separa o necessário para a perna do Perpétuo e abre o hedge (Long no Spot + Short no Perpétuo) sem intervenção manual.</p>
       </>
     ),
   },
@@ -123,7 +124,7 @@ export default function HelpModal({ onClose }: { onClose: () => void }) {
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200 flex items-start gap-3">
             <ShieldAlert className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
             <p>
-              <strong>Importante:</strong> o robô não opera com valores menores que <strong>$10 USDT</strong>. Deixe sempre saldo suficiente (acima de $10) nas contas Spot e Futuros para a colheita funcionar.
+              <strong>Importante:</strong> o robô não opera com valores menores que <strong>$10 USDT</strong>. Deixe sempre saldo suficiente (acima de $10) na <strong>conta Spot</strong> — o robô faz o rateio automático com a conta de Futuros.
             </p>
           </div>
 
