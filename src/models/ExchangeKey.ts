@@ -13,9 +13,16 @@ const ExchangeKeySchema = new mongoose.Schema({
   futuresUsdt: { type: Number, default: 0 },
   futuresUsdc: { type: Number, default: 0 },
   futuresTotalEquity: { type: Number, default: 0 },
-    balancesUpdatedAt: { type: Date },
+  balancesUpdatedAt: { type: Date },
+  // ─── cTrader Open API (Pepperstone) ─────────────────────────────────────────
+  clientId: { type: String },
+  clientSecret: { type: String },   // criptografado
+  accessToken: { type: String },    // criptografado
+  refreshToken: { type: String },   // criptografado
+  accountId: { type: String },
+  environment: { type: String, enum: ['live', 'demo'], default: 'live' },
+  ctraderTokenUpdatedAt: { type: Date },
   createdAt: { type: Date, default: Date.now }
 });
 
 export default mongoose.models.ExchangeKey || mongoose.model('ExchangeKey', ExchangeKeySchema);
-

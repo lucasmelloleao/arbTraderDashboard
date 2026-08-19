@@ -235,7 +235,7 @@ export default function LiquidationPage() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <ShieldAlert className="w-7 h-7 text-amber-500 animate-pulse" />
-            Liquidações Aave V3 (Multi-chain)
+            Liquidações Aave V3 (Multi-chain) - (EM DESENVOLVIMENTO)
           </h1>
           <p className="text-slate-400 text-sm mt-1">
             Gerencie robôs de liquidação, monitore posições devedoras críticas e acompanhe os logs em tempo real.

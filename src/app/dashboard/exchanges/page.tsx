@@ -12,14 +12,20 @@ const SUPPORTED_EXCHANGES = [
   { id: 'binance', name: 'Binance' },
   { id: 'okx', name: 'OKX' },
   { id: 'bybit', name: 'Bybit' },
-  { id: 'gateio', name: 'Gate.io' }
+  { id: 'gateio', name: 'Gate.io' },
+  { id: 'ctrader', name: 'cTrader (Pepperstone)' }
 ];
+
+const CTRADER_IDS = ['ctrader', 'pepperstone'];
 
 type ExchangeKey = {
   _id: string;
   exchangeId: string;
   name: string;
   apiKey: string;
+  clientId?: string;
+  accountId?: string;
+  environment?: string;
   active: boolean;
   createdAt: string;
 };
@@ -53,6 +59,13 @@ export default function ExchangesPage() {
   const [cexName, setCexName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
+  // cTrader Open API fields
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [accessToken, setAccessToken] = useState('');
+  const [refreshToken, setRefreshToken] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const [environment, setEnvironment] = useState<'live' | 'demo'>('live');
   const [cexLoading, setCexLoading] = useState(false);
   const [editingCexId, setEditingCexId] = useState<string | null>(null);
   const [isCexFormOpen, setIsCexFormOpen] = useState(false);
@@ -108,35 +121,83 @@ export default function ExchangesPage() {
     e.preventDefault();
     setCexLoading(true);
     try {
-      const url = '/api/exchanges';
-      const method = editingCexId ? 'PUT' : 'POST';
-      const body = editingCexId 
-        ? JSON.stringify({ id: editingCexId, exchangeId, name: cexName, apiKey, apiSecret })
-        : JSON.stringify({ exchangeId, name: cexName, apiKey, apiSecret });
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body
-      });
-      
-      if (res.ok) {
-        setExchangeId(SUPPORTED_EXCHANGES[0].id);
-        setCexName('');
-        setApiKey('');
-        setApiSecret('');
-        setEditingCexId(null);
-        setIsCexFormOpen(false);
+      const saved = await saveCexKey();
+      if (saved) {
+        resetCexForm();
         fetchExchanges();
-      } else {
-        const err = await res.json();
-        alert(err.reason || 'Failed to save exchange key');
       }
-    } catch (e) {
-      console.error(e);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to save exchange key');
     } finally {
       setCexLoading(false);
     }
+  };
+
+  // Salva a chave (cria ou atualiza) e retorna o id salvo (ou null em falha).
+  const saveCexKey = async (): Promise<string | null> => {
+    const url = '/api/exchanges';
+    const method = editingCexId ? 'PUT' : 'POST';
+    const isCtraderKey = CTRADER_IDS.includes(exchangeId);
+    const baseBody: any = { exchangeId, name: cexName };
+    if (isCtraderKey) {
+      Object.assign(baseBody, {
+        clientId,
+        clientSecret,
+        accessToken,
+        refreshToken,
+        accountId,
+        environment,
+      });
+    } else {
+      Object.assign(baseBody, { apiKey, apiSecret });
+    }
+    if (editingCexId) baseBody.id = editingCexId;
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      body: JSON.stringify(baseBody),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.reason || 'Failed to save exchange key');
+    }
+    return data.exchange?._id || editingCexId;
+  };
+
+  // Salva a chave cTrader e abre o fluxo OAuth para obter os tokens.
+  const handleCtraderAuthorize = async () => {
+    if (!clientId.trim()) { alert('Preencha o Client ID antes de autorizar.'); return; }
+    setCexLoading(true);
+    try {
+      const savedId = await saveCexKey();
+      if (!savedId) throw new Error('Falha ao salvar a chave');
+      resetCexForm();
+      fetchExchanges();
+      // Abre o login do cTrader ID; ao voltar, o redirect (raiz) captura o ?code=
+      // e o /api/ctrader/callback salva os tokens usando o clientSecret salvo.
+      const authUrl = `https://openapi.ctrader.com/apps/auth?client_id=${encodeURIComponent(clientId.trim())}&redirect_uri=${encodeURIComponent('https://arb-trader-dashboard.vercel.app/')}&scope=trading`;
+      window.location.href = authUrl;
+    } catch (err: any) {
+      alert(err?.message || 'Falha ao salvar a chave antes de autorizar');
+    } finally {
+      setCexLoading(false);
+    }
+  };
+
+  const resetCexForm = () => {
+    setExchangeId(SUPPORTED_EXCHANGES[0].id);
+    setCexName('');
+    setApiKey('');
+    setApiSecret('');
+    setClientId('');
+    setClientSecret('');
+    setAccessToken('');
+    setRefreshToken('');
+    setAccountId('');
+    setEnvironment('live');
+    setEditingCexId(null);
+    setIsCexFormOpen(false);
   };
 
   const handleCexEdit = (exchange: ExchangeKey) => {
@@ -145,16 +206,18 @@ export default function ExchangesPage() {
     setCexName(exchange.name);
     setApiKey(exchange.apiKey);
     setApiSecret(''); // Leave blank to keep existing secret
+    const isCtraderKey = CTRADER_IDS.includes(exchange.exchangeId);
+    setClientId(isCtraderKey ? (exchange.clientId || exchange.apiKey) : '');
+    setClientSecret(''); // Leave blank to keep existing
+    setAccessToken('');
+    setRefreshToken('');
+    setAccountId(isCtraderKey ? (exchange.accountId || '') : '');
+    setEnvironment(isCtraderKey ? (exchange.environment === 'demo' ? 'demo' : 'live') : 'live');
     setIsCexFormOpen(true);
   };
 
   const handleCexCancelEdit = () => {
-    setEditingCexId(null);
-    setExchangeId(SUPPORTED_EXCHANGES[0].id);
-    setCexName('');
-    setApiKey('');
-    setApiSecret('');
-    setIsCexFormOpen(false);
+    resetCexForm();
   };
 
   const handleCexDelete = async (id: string) => {
@@ -399,7 +462,15 @@ export default function ExchangesPage() {
                       </span>
                     </h4>
                     <p className="text-xs text-slate-400 font-mono mt-2">
-                      Chave: {exchange.apiKey.substring(0, 8)}...{exchange.apiKey.substring(exchange.apiKey.length - 4)}
+                      {CTRADER_IDS.includes(exchange.exchangeId) ? (
+                        <>
+                          Client ID: {exchange.clientId || exchange.apiKey}
+                          {exchange.accountId && <> · Account: {exchange.accountId}</>}
+                          {exchange.environment && <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${exchange.environment === 'demo' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{exchange.environment.toUpperCase()}</span>}
+                        </>
+                      ) : (
+                        <>Chave: {exchange.apiKey.substring(0, 8)}...{exchange.apiKey.substring(exchange.apiKey.length - 4)}</>
+                      )}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -445,16 +516,59 @@ export default function ExchangesPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">API Key</label>
-                  <input required type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="Cole sua API Key aqui" />
-                </div>
+                {CTRADER_IDS.includes(exchangeId) ? (
+                  <>
+                    <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-3 text-xs text-sky-200/80">
+                      Credenciais da cTrader Open API (Spotware). Acesse <span className="font-mono text-sky-300">connect.spotware.com</span> → Applications → Credentials. Preencha Client ID/Secret e depois clique em <b>Autorizar cTrader</b> para obter os tokens automaticamente (você será levado ao login do cTrader ID e voltará com tudo salvo).
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Client ID (App ID)</label>
+                        <input required type="text" value={clientId} onChange={e => setClientId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="Ex: 1234567" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Client Secret {editingCexId && <span className="text-xs text-orange-400">(vazio = manter)</span>}</label>
+                        <input type="password" required={!editingCexId} value={clientSecret} onChange={e => setClientSecret(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder={editingCexId ? "Deixe em branco para manter" : "App secret"} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Account ID (ctidTraderAccountId) <span className="text-xs text-slate-500">(opcional — detecta pelo token)</span></label>
+                      <input type="text" value={accountId} onChange={e => setAccountId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="Ex: 1250012345" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Ambiente</label>
+                        <select value={environment} onChange={e => setEnvironment(e.target.value as 'live' | 'demo')} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 appearance-none">
+                          <option value="live">Live</option>
+                          <option value="demo">Demo</option>
+                        </select>
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          disabled={cexLoading}
+                          onClick={handleCtraderAuthorize}
+                          className={`w-full text-center px-4 py-2 rounded-lg font-medium transition-colors text-sm ${clientId.trim() && !cexLoading ? 'bg-sky-600 hover:bg-sky-700 text-white' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
+                        >
+                          {cexLoading ? 'Salvando...' : 'Autorizar cTrader'}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">API Key</label>
+                      <input required type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder="Cole sua API Key aqui" />
+                    </div>
 
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">API Secret {editingCexId && <span className="text-xs text-orange-400">(Deixe em branco para manter o atual)</span>}</label>
-                  <input type="password" required={!editingCexId} value={apiSecret} onChange={e => setApiSecret(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder={editingCexId ? "Cole a nova senha apenas se desejar alterá-la" : "Cole seu API Secret aqui"} />
-                  <p className="text-xs text-slate-500 mt-1">Isso será criptografado via AES-256-GCM antes de ser salvo no banco.</p>
-                </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">API Secret {editingCexId && <span className="text-xs text-orange-400">(Deixe em branco para manter o atual)</span>}</label>
+                      <input type="password" required={!editingCexId} value={apiSecret} onChange={e => setApiSecret(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 font-mono text-sm" placeholder={editingCexId ? "Cole a nova senha apenas se desejar alterá-la" : "Cole seu API Secret aqui"} />
+                      <p className="text-xs text-slate-500 mt-1">Isso será criptografado via AES-256-GCM antes de ser salvo no banco.</p>
+                    </div>
+                  </>
+                )}
 
                 <button type="submit" disabled={cexLoading} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mt-4">
                   {cexLoading ? 'Salvando...' : (editingCexId ? 'Salvar Alterações' : 'Registrar Chaves da API')}
