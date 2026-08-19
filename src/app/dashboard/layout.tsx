@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Wallet, Zap, LayoutDashboard, LogOut, History, Activity, TrendingUp, User, Menu, X, CalendarRange, Terminal, ShieldAlert, ChevronDown, HelpCircle } from 'lucide-react';
+import { Wallet, Zap, LayoutDashboard, LogOut, History, Activity, TrendingUp, User, Menu, X, CalendarRange, Terminal, ShieldAlert, ChevronDown, HelpCircle, Globe } from 'lucide-react';
 import clsx from 'clsx';
 import HelpModal from '@/components/HelpModal';
 import { useLanguage, LanguageSwitcher } from '@/lib/i18n';
@@ -61,6 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const links = [
     { href: '/dashboard', label: t('overview'), icon: LayoutDashboard },
     { href: '/dashboard/perpetual-arb', label: t('arbitragemFunding'), icon: TrendingUp },
+    { href: '/dashboard/forex-arb', label: t('arbitragemForex'), icon: Globe },
     { href: '/dashboard/liquidation', label: t('liquidacao'), icon: ShieldAlert },
     { href: '/dashboard/flash-loan', label: t('flashLoans'), icon: Zap },
     { href: '/dashboard/exchanges', label: t('exchanges'), icon: Wallet },

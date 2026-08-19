@@ -10,6 +10,7 @@ const translations = {
     // Navegação / Menu
     overview: 'Overview',
     arbitragemFunding: 'Arbitragem Funding',
+    arbitragemForex: 'Arbitragem Forex',
     deltaNulo: 'Arbitragem Funding',
     liquidacao: 'Liquidação',
     flashLoans: 'Flash Loans',
@@ -135,6 +136,7 @@ const translations = {
   'en-US': {
     overview: 'Overview',
     arbitragemFunding: 'Funding Arbitrage',
+    arbitragemForex: 'Forex Arbitrage',
     deltaNulo: 'Delta Neutral - Short/Long',
     liquidacao: 'Liquidation',
     flashLoans: 'Flash Loans',
