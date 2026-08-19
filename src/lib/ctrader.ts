@@ -7,11 +7,15 @@ export const CTRADER_TOKEN_URL = 'https://openapi.ctrader.com/apps/token';
 // Redirect URI registrado no app Open API (o mesmo usado na URL de autorização).
 export const CTRADER_REDIRECT_URI = 'https://arb-trader-dashboard.vercel.app/';
 
-export function buildCtraderAuthUrl(clientId: string): string {
+// Escopos: 'accounts' (somente leitura — disponível com app "Submitted") e
+// 'trading' (opera ordens — exige app "Active", após aprovação do KYC/Spotware).
+export type CtraderScope = 'accounts' | 'trading';
+
+export function buildCtraderAuthUrl(clientId: string, scope: CtraderScope = 'accounts'): string {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: CTRADER_REDIRECT_URI,
-    scope: 'trading',
+    scope,
   });
   return `${CTRADER_AUTH_URL}?${params.toString()}`;
 }

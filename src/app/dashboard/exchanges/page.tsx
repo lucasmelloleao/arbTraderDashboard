@@ -30,6 +30,7 @@ type ExchangeKey = {
   environment?: string;
   host?: string;
   senderCompId?: string;
+  targetCompId?: string;
   username?: string;
   quotePort?: number;
   tradePort?: number;
@@ -192,6 +193,8 @@ export default function ExchangesPage() {
   };
 
   // Salva a chave cTrader e abre o fluxo OAuth para obter os tokens.
+  // Escopo 'accounts' = leitura (funciona com app "Submitted"); quando o app for
+  // aprovado ("Active"), troque para 'trading' para operar ordens.
   const handleCtraderAuthorize = async () => {
     if (!clientId.trim()) { alert('Preencha o Client ID antes de autorizar.'); return; }
     setCexLoading(true);
@@ -202,7 +205,7 @@ export default function ExchangesPage() {
       fetchExchanges();
       // Abre o login do cTrader ID; ao voltar, o redirect (raiz) captura o ?code=
       // e o /api/ctrader/callback salva os tokens usando o clientSecret salvo.
-      const authUrl = `https://openapi.ctrader.com/apps/auth?client_id=${encodeURIComponent(clientId.trim())}&redirect_uri=${encodeURIComponent('https://arb-trader-dashboard.vercel.app/')}&scope=trading`;
+      const authUrl = `https://openapi.ctrader.com/apps/auth?client_id=${encodeURIComponent(clientId.trim())}&redirect_uri=${encodeURIComponent('https://arb-trader-dashboard.vercel.app/')}&scope=accounts`;
       window.location.href = authUrl;
     } catch (err: any) {
       alert(err?.message || 'Falha ao salvar a chave antes de autorizar');
@@ -251,7 +254,7 @@ export default function ExchangesPage() {
     setFixQuotePort(isFixKey ? String(exchange.quotePort || 5211) : '5211');
     setFixTradePort(isFixKey ? String(exchange.tradePort || 5212) : '5212');
     setFixSenderCompId(isFixKey ? (exchange.senderCompId || '') : '');
-    setFixTargetCompId('CSERVER');
+    setFixTargetCompId(isFixKey ? (exchange.targetCompId || 'CSERVER') : 'CSERVER');
     setFixUsername(isFixKey ? (exchange.username || '') : '');
     setFixPassword('');
     setIsCexFormOpen(true);
@@ -566,7 +569,7 @@ export default function ExchangesPage() {
                 {CTRADER_IDS.includes(exchangeId) ? (
                   <>
                     <div className="rounded-lg bg-sky-500/5 border border-sky-500/20 p-3 text-xs text-sky-200/80">
-                      Credenciais da cTrader Open API (Spotware). Acesse <span className="font-mono text-sky-300">connect.spotware.com</span> → Applications → Credentials. Preencha Client ID/Secret e depois clique em <b>Autorizar cTrader</b> para obter os tokens automaticamente (você será levado ao login do cTrader ID e voltará com tudo salvo).
+                      Credenciais da cTrader Open API (Spotware). Acesse <span className="font-mono text-sky-300">connect.spotware.com</span> → Applications → Credentials. Preencha Client ID/Secret e clique em <b>Autorizar cTrader</b> para obter os tokens automaticamente. <b>Escopo atual: leitura (accounts)</b> — funciona enquanto o app está "Submitted". Quando a Spotware aprovar o app ("Active"), a autorização passará a incluir trading (ordens).
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
