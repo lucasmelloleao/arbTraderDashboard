@@ -54,6 +54,8 @@ export default function ForexArbPage() {
   const [trades, setTrades] = useState<ForexArbTrade[]>([]);
   const [opportunities, setOpportunities] = useState<ForexArbTrade[]>([]);
   const [settings, setSettings] = useState<ForexArbSettings | null>(null);
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [settingsForm, setSettingsForm] = useState<ForexArbSettings>(DEFAULT_SETTINGS);
   const [exchangeKeys, setExchangeKeys] = useState<ExchangeKey[]>([]);
   const [botOnline, setBotOnline] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -213,49 +215,46 @@ export default function ForexArbPage() {
     });
   };
 
-  // ── Settings form (inline) ──
+  // ── Settings form (padrão Editar, como na arbitragem funding) ──
+  const startEditingSettings = () => {
+    const base = settings ?? DEFAULT_SETTINGS;
+    setSettingsForm({ ...base, allowedExchanges: Array.isArray(base.allowedExchanges) ? [...base.allowedExchanges] : [] });
+    setIsEditingSettings(true);
+  };
+
+  const cancelEditingSettings = () => {
+    setIsEditingSettings(false);
+  };
+
   const saveSettings = async () => {
     try {
-      const payload = settings ?? DEFAULT_SETTINGS;
       const res = await fetch('/api/forex-arb/settings', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify(payload),
+        body: JSON.stringify(settingsForm),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Erro ao salvar settings');
       }
       setSettings(await res.json());
+      setIsEditingSettings(false);
       setSuccessMsg('Configurações salvas com sucesso!');
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) { setError(err.message); }
   };
 
-  const updateSettingsField = async (field: string, value: unknown) => {
-    try {
-      const res = await fetch('/api/forex-arb/settings', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ [field]: value }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Erro ao salvar settings');
-      }
-      setSettings(await res.json());
-      setSuccessMsg('Configuração salva.');
-      setTimeout(() => setSuccessMsg(null), 2500);
-    } catch (err: any) { setError(err.message); }
+  const updateSettingsForm = (field: string, value: unknown) => {
+    setSettingsForm(prev => ({ ...prev, [field]: value }));
   };
 
-  // Alterna uma corretora na lista allowedExchanges (rastreamento de oportunidades)
-  const toggleExchange = async (ex: string) => {
-    const current = settings ?? DEFAULT_SETTINGS;
-    let curr = Array.isArray(current.allowedExchanges) ? [...current.allowedExchanges] : [];
-    if (curr.includes(ex)) curr = curr.filter((a: string) => a !== ex);
-    else curr = [...curr, ex];
-    await updateSettingsField('allowedExchanges', curr);
+  // Alterna uma corretora na lista allowedExchanges do form (rastreamento de oportunidades)
+  const toggleExchange = (ex: string) => {
+    setSettingsForm(prev => {
+      const curr = Array.isArray(prev.allowedExchanges) ? [...prev.allowedExchanges] : [];
+      if (curr.includes(ex)) return { ...prev, allowedExchanges: curr.filter((a: string) => a !== ex) };
+      return { ...prev, allowedExchanges: [...curr, ex] };
+    });
   };
 
   return (
@@ -284,7 +283,7 @@ export default function ForexArbPage() {
             <Globe className="h-6 w-6 text-indigo-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-white">Arbitragem Forex</h1>
+            <h1 className="text-2xl font-black text-white">Arbitragem Forex (EM DESENVOLVIMENTO)</h1>
             <p className="text-sm text-slate-400">Arbitragem simples e triangular dentro da corretora</p>
           </div>
         </div>
@@ -352,87 +351,154 @@ export default function ForexArbPage() {
         </div>
       </div>
 
-      {/* Settings inline — sempre visível (usa defaults quando ainda não salvou) */}
-      <div className="rounded-xl border border-indigo-500/20 bg-slate-950/70 p-5 space-y-4">
-        {(() => { const s = settings ?? DEFAULT_SETTINGS; return (
-        <>
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-indigo-400" /> Configurações da Arbitragem Forex
-              {!settings && <span className="rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-300">Não configurado — edite e salve abaixo</span>}
-            </h3>
-            <div className="flex items-center gap-4 text-xs flex-wrap">
-              <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={s.autoExecute} onChange={e => updateSettingsField('autoExecute', e.target.checked)}
-                  className="rounded bg-slate-800 border-slate-600" />
-                Execução Automática
-              </label>
-              <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={s.triangularEnabled} onChange={e => updateSettingsField('triangularEnabled', e.target.checked)}
-                  className="rounded bg-slate-800 border-slate-600" />
-                Triangular
-              </label>
-              <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={s.simpleEnabled} onChange={e => updateSettingsField('simpleEnabled', e.target.checked)}
-                  className="rounded bg-slate-800 border-slate-600" />
-                Simples
-              </label>
-              <button onClick={saveSettings}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-500 transition-colors">
-                Salvar Configurações
+      {/* Settings — padrão Editar (como arbitragem funding): exibe valores, edita ao clicar em "Editar" */}
+      <div className="rounded-xl border border-indigo-500/20 bg-slate-950/70 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-indigo-400" /> Configurações da Arbitragem Forex
+            {!settings && !isEditingSettings && <span className="rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-300">Não configurado</span>}
+          </h3>
+          {!isEditingSettings ? (
+            <button onClick={startEditingSettings} className="text-xs font-semibold text-indigo-300 hover:text-white underline">
+              Editar
+            </button>
+          ) : (
+            <div className="flex gap-3">
+              <button onClick={cancelEditingSettings} className="text-xs font-semibold text-slate-400 hover:text-white underline">
+                Cancelar
+              </button>
+              <button onClick={saveSettings} className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 underline">
+                Salvar
               </button>
             </div>
+          )}
+        </div>
+
+        {(() => { const s = settings ?? DEFAULT_SETTINGS; return (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Trade Size (USDT)</span>
+              {!isEditingSettings ? (
+                <span className="font-bold text-white">${s.tradeSize}</span>
+              ) : (
+                <input type="number" value={settingsForm.tradeSize} onChange={e => updateSettingsForm('tradeSize', Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+              )}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Retorno Mínimo (%)</span>
+              {!isEditingSettings ? (
+                <span className="font-bold text-emerald-400">{s.minProfitPct}%</span>
+              ) : (
+                <input type="number" step="0.01" value={settingsForm.minProfitPct} onChange={e => updateSettingsForm('minProfitPct', Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+              )}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Volume Mínimo 24h (USDT)</span>
+              {!isEditingSettings ? (
+                <span className="font-bold text-white">${s.minVolume24hUSD?.toLocaleString()}</span>
+              ) : (
+                <input type="number" value={settingsForm.minVolume24hUSD} onChange={e => updateSettingsForm('minVolume24hUSD', Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+              )}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Ciclo de Scan (min)</span>
+              {!isEditingSettings ? (
+                <span className="font-bold text-white">{(s.scanIntervalMs || 60000) / 60000}</span>
+              ) : (
+                <input type="number" min="1" value={(settingsForm.scanIntervalMs || 60000) / 60000} onChange={e => updateSettingsForm('scanIntervalMs', Number(e.target.value) * 60000)}
+                  className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+              )}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Max Perda Diária (USDT)</span>
+              {!isEditingSettings ? (
+                <span className="font-bold text-white">${s.maxDailyLoss}</span>
+              ) : (
+                <input type="number" value={settingsForm.maxDailyLoss} onChange={e => updateSettingsForm('maxDailyLoss', Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+              )}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Max Slippage (%)</span>
+              {!isEditingSettings ? (
+                <span className="font-bold text-white">{s.maxSlippagePct}%</span>
+              ) : (
+                <input type="number" step="0.01" value={settingsForm.maxSlippagePct} onChange={e => updateSettingsForm('maxSlippagePct', Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+              )}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Execução Automática</span>
+              {!isEditingSettings ? (
+                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold ${s.autoExecute ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}`}>
+                  {s.autoExecute ? 'Ativa' : 'Desativada'}
+                </span>
+              ) : (
+                <label className="flex items-center gap-2 text-slate-200 cursor-pointer">
+                  <input type="checkbox" checked={settingsForm.autoExecute} onChange={e => updateSettingsForm('autoExecute', e.target.checked)}
+                    className="rounded bg-slate-800 border-slate-600" />
+                  {settingsForm.autoExecute ? 'Ativa' : 'Desativada'}
+                </label>
+              )}
+            </div>
+            <div>
+              <span className="block text-xs text-slate-500 mb-1">Tipos de Arbitragem</span>
+              {!isEditingSettings ? (
+                <div className="flex gap-2">
+                  {s.triangularEnabled && <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 font-semibold rounded text-xs">Triangular</span>}
+                  {s.simpleEnabled && <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 font-semibold rounded text-xs">Simples</span>}
+                  {!s.triangularEnabled && !s.simpleEnabled && <span className="text-slate-600 text-xs italic">Nenhum</span>}
+                </div>
+              ) : (
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-slate-200 cursor-pointer">
+                    <input type="checkbox" checked={settingsForm.triangularEnabled} onChange={e => updateSettingsForm('triangularEnabled', e.target.checked)}
+                      className="rounded bg-slate-800 border-slate-600" />
+                    Triangular
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-200 cursor-pointer">
+                    <input type="checkbox" checked={settingsForm.simpleEnabled} onChange={e => updateSettingsForm('simpleEnabled', e.target.checked)}
+                      className="rounded bg-slate-800 border-slate-600" />
+                    Simples
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Trade Size (USDT)</label>
-              <input type="number" value={s.tradeSize} onChange={e => updateSettingsField('tradeSize', Number(e.target.value))}
-                className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Retorno Mínimo (%)</label>
-              <input type="number" step="0.01" value={s.minProfitPct} onChange={e => updateSettingsField('minProfitPct', Number(e.target.value))}
-                className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Volume Mínimo 24h (USDT)</label>
-              <input type="number" value={s.minVolume24hUSD} onChange={e => updateSettingsField('minVolume24hUSD', Number(e.target.value))}
-                className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Scan Interval (ms)</label>
-              <input type="number" value={s.scanIntervalMs} onChange={e => updateSettingsField('scanIntervalMs', Number(e.target.value))}
-                className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
-            </div>
-          </div>
-          <div className="border-t border-white/10 pt-4">
-            <span className="block text-xs text-slate-400 mb-2">Corretoras Rastreadas (oportunidades)</span>
-            {exchangeKeys.length === 0 ? (
-              <span className="text-slate-600 text-xs italic">Nenhuma corretora cadastrada — adicione em Exchange Integrations → Corretoras Centralizadas (CEX)</span>
-            ) : (
-              <div className="flex flex-wrap gap-4">
-                {Array.from(new Set(exchangeKeys.map(ek => ek.exchangeId))).map(ex => {
-                  const isChecked = Array.isArray(s.allowedExchanges) && s.allowedExchanges.includes(ex);
-                  return (
-                    <label key={ex} className="flex items-center gap-2 text-slate-200 text-sm cursor-pointer hover:text-white transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleExchange(ex)}
-                        className="h-4 w-4 rounded border-white/20 bg-slate-900 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900"
-                      />
-                      {ex.toUpperCase()}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-            {Array.isArray(s.allowedExchanges) && s.allowedExchanges.length > 0 && (
-              <div className="flex gap-2 mt-3">
-                {s.allowedExchanges.map(ex => (
+
+          <div className="border-t border-white/10 pt-4 mt-4">
+            <span className="block text-xs text-slate-500 mb-2">Corretoras Rastreadas (oportunidades)</span>
+            {!isEditingSettings ? (
+              <div className="flex gap-2">
+                {Array.isArray(s.allowedExchanges) && s.allowedExchanges.length > 0 ? s.allowedExchanges.map(ex => (
                   <span key={ex} className="px-2 py-1 bg-indigo-500/20 text-indigo-300 font-semibold rounded text-xs">{ex.toUpperCase()}</span>
-                ))}
+                )) : <span className="text-slate-600 text-xs italic">Todas as cadastradas</span>}
               </div>
+            ) : (
+              exchangeKeys.length === 0 ? (
+                <span className="text-slate-600 text-xs italic">Nenhuma corretora cadastrada — adicione em Exchange Integrations → Corretoras Centralizadas (CEX)</span>
+              ) : (
+                <div className="flex flex-wrap gap-4">
+                  {Array.from(new Set(exchangeKeys.map(ek => ek.exchangeId))).map(ex => {
+                    const isChecked = Array.isArray(settingsForm.allowedExchanges) && settingsForm.allowedExchanges.includes(ex);
+                    return (
+                      <label key={ex} className="flex items-center gap-2 text-slate-200 text-sm cursor-pointer hover:text-white transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleExchange(ex)}
+                          className="h-4 w-4 rounded border-white/20 bg-slate-900 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900"
+                        />
+                        {ex.toUpperCase()}
+                      </label>
+                    );
+                  })}
+                </div>
+              )
             )}
           </div>
         </>
