@@ -18,6 +18,23 @@ function authHeaders(): Record<string, string> {
 const fmtUsd = (v: number) => `$${v.toFixed(2)}`;
 const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(3)}%`;
 
+// Valores padrão usados quando ainda não existem configurações salvas no banco.
+// Permite que o usuário crie as configurações do zero na primeira visita.
+const DEFAULT_SETTINGS: ForexArbSettings = {
+  isScanningEnabled: false,
+  tradeSize: 100,
+  minProfitPct: 0.05,
+  minVolume24hUSD: 50000,
+  maxStrategiesPerScan: 5,
+  scanIntervalMs: 60000,
+  maxDailyLoss: 10,
+  maxSlippagePct: 0.1,
+  autoExecute: true,
+  simpleEnabled: true,
+  triangularEnabled: true,
+  allowedExchanges: [],
+};
+
 function LegBadge({ leg }: { leg: ForexLeg }) {
   return (
     <span className={clsx(
@@ -127,16 +144,19 @@ export default function ForexArbPage() {
 
   // ── Actions ──
   const toggleScanning = async () => {
-    if (!settings) return;
     try {
+      const current = settings ?? DEFAULT_SETTINGS;
       const res = await fetch('/api/forex-arb/settings', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ isScanningEnabled: !settings.isScanningEnabled }),
+        body: JSON.stringify({ isScanningEnabled: !current.isScanningEnabled }),
       });
-      if (!res.ok) throw new Error('Erro ao atualizar settings');
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao atualizar settings');
+      }
       setSettings(await res.json());
-      setSuccessMsg(settings.isScanningEnabled ? 'Scanner Forex pausado.' : 'Scanner Forex iniciado!');
+      setSuccessMsg(current.isScanningEnabled ? 'Scanner Forex pausado.' : 'Scanner Forex iniciado!');
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) { setError(err.message); }
   };
@@ -183,15 +203,35 @@ export default function ForexArbPage() {
   };
 
   // ── Settings form (inline) ──
+  const saveSettings = async () => {
+    try {
+      const payload = settings ?? DEFAULT_SETTINGS;
+      const res = await fetch('/api/forex-arb/settings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao salvar settings');
+      }
+      setSettings(await res.json());
+      setSuccessMsg('Configurações salvas com sucesso!');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) { setError(err.message); }
+  };
+
   const updateSettingsField = async (field: string, value: unknown) => {
-    if (!settings) return;
     try {
       const res = await fetch('/api/forex-arb/settings', {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ [field]: value }),
       });
-      if (!res.ok) throw new Error('Erro ao salvar settings');
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao salvar settings');
+      }
       setSettings(await res.json());
       setSuccessMsg('Configuração salva.');
       setTimeout(() => setSuccessMsg(null), 2500);
@@ -236,13 +276,12 @@ export default function ForexArbPage() {
             <span className={clsx('h-2 w-2 rounded-full', botOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400')} />
             Robô {botOnline ? 'ONLINE' : 'OFFLINE'}
           </span>
-          <button onClick={toggleScanning} disabled={!settings}
+          <button onClick={toggleScanning}
             className={clsx(
               'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
               settings?.isScanningEnabled
                 ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white',
-              !settings && 'opacity-50 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
             )}>
             {settings?.isScanningEnabled ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             {settings?.isScanningEnabled ? 'Parar Scanner' : 'Iniciar Scanner'}
@@ -293,55 +332,62 @@ export default function ForexArbPage() {
         </div>
       </div>
 
-      {/* Settings inline */}
-      {settings && (
-        <div className="rounded-xl border border-indigo-500/20 bg-slate-950/70 p-5 space-y-4">
-          <div className="flex items-center justify-between">
+      {/* Settings inline — sempre visível (usa defaults quando ainda não salvou) */}
+      <div className="rounded-xl border border-indigo-500/20 bg-slate-950/70 p-5 space-y-4">
+        {(() => { const s = settings ?? DEFAULT_SETTINGS; return (
+        <>
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Wallet className="h-4 w-4 text-indigo-400" /> Configurações da Arbitragem Forex
+              {!settings && <span className="rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-300">Não configurado — edite e salve abaixo</span>}
             </h3>
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-4 text-xs flex-wrap">
               <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={settings.autoExecute} onChange={e => updateSettingsField('autoExecute', e.target.checked)}
+                <input type="checkbox" checked={s.autoExecute} onChange={e => updateSettingsField('autoExecute', e.target.checked)}
                   className="rounded bg-slate-800 border-slate-600" />
                 Execução Automática
               </label>
               <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={settings.triangularEnabled} onChange={e => updateSettingsField('triangularEnabled', e.target.checked)}
+                <input type="checkbox" checked={s.triangularEnabled} onChange={e => updateSettingsField('triangularEnabled', e.target.checked)}
                   className="rounded bg-slate-800 border-slate-600" />
                 Triangular
               </label>
               <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={settings.simpleEnabled} onChange={e => updateSettingsField('simpleEnabled', e.target.checked)}
+                <input type="checkbox" checked={s.simpleEnabled} onChange={e => updateSettingsField('simpleEnabled', e.target.checked)}
                   className="rounded bg-slate-800 border-slate-600" />
                 Simples
               </label>
+              <button onClick={saveSettings}
+                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-500 transition-colors">
+                Salvar Configurações
+              </button>
             </div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             <div>
               <label className="text-xs text-slate-400 block mb-1">Trade Size (USDT)</label>
-              <input type="number" value={settings.tradeSize} onChange={e => updateSettingsField('tradeSize', Number(e.target.value))}
+              <input type="number" value={s.tradeSize} onChange={e => updateSettingsField('tradeSize', Number(e.target.value))}
                 className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
             </div>
             <div>
               <label className="text-xs text-slate-400 block mb-1">Retorno Mínimo (%)</label>
-              <input type="number" step="0.01" value={settings.minProfitPct} onChange={e => updateSettingsField('minProfitPct', Number(e.target.value))}
+              <input type="number" step="0.01" value={s.minProfitPct} onChange={e => updateSettingsField('minProfitPct', Number(e.target.value))}
                 className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
             </div>
             <div>
               <label className="text-xs text-slate-400 block mb-1">Volume Mínimo 24h (USDT)</label>
-              <input type="number" value={settings.minVolume24hUSD} onChange={e => updateSettingsField('minVolume24hUSD', Number(e.target.value))}
+              <input type="number" value={s.minVolume24hUSD} onChange={e => updateSettingsField('minVolume24hUSD', Number(e.target.value))}
                 className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
             </div>
             <div>
               <label className="text-xs text-slate-400 block mb-1">Scan Interval (ms)</label>
-              <input type="number" value={settings.scanIntervalMs} onChange={e => updateSettingsField('scanIntervalMs', Number(e.target.value))}
+              <input type="number" value={s.scanIntervalMs} onChange={e => updateSettingsField('scanIntervalMs', Number(e.target.value))}
                 className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
             </div>
           </div>
-        </div>
-      )}
+        </>
+        ); })()}
+      </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-white/10 pb-3">
