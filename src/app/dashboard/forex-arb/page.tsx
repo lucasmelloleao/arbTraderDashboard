@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Globe, RefreshCw, Play, Square, TrendingUp, Wallet, X, ShieldAlert } from 'lucide-react';
 import clsx from 'clsx';
-import { ForexArbStrategy, ForexArbTrade, ForexArbSettings, ConfirmState, ForexLeg } from './types';
+import { ForexArbStrategy, ForexArbTrade, ForexArbSettings, ConfirmState, ForexLeg, ExchangeKey } from './types';
 
 function getToken(): string {
   if (typeof window === 'undefined') return '';
@@ -54,6 +54,7 @@ export default function ForexArbPage() {
   const [trades, setTrades] = useState<ForexArbTrade[]>([]);
   const [opportunities, setOpportunities] = useState<ForexArbTrade[]>([]);
   const [settings, setSettings] = useState<ForexArbSettings | null>(null);
+  const [exchangeKeys, setExchangeKeys] = useState<ExchangeKey[]>([]);
   const [botOnline, setBotOnline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +96,16 @@ export default function ForexArbPage() {
     } catch (err: any) { setError(err.message); }
   };
 
+  const fetchExchangeKeys = async () => {
+    try {
+      const res = await fetch('/api/exchanges', { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setExchangeKeys(data.exchanges || []);
+      }
+    } catch { /* silent */ }
+  };
+
   const fetchBotStatus = async () => {
     try {
       const res = await fetch('/api/bot-status?botName=forex-arb', { headers: authHeaders() });
@@ -119,7 +130,7 @@ export default function ForexArbPage() {
       if (isPolling) return;
       isPolling = true;
       try {
-        await Promise.allSettled([fetchStrategies(), fetchTrades(), fetchOpportunities(), fetchSettings(), fetchBotStatus()]);
+        await Promise.allSettled([fetchStrategies(), fetchTrades(), fetchOpportunities(), fetchSettings(), fetchExchangeKeys(), fetchBotStatus()]);
       } finally { isPolling = false; }
     };
     refresh().finally(() => setLoading(false));
@@ -236,6 +247,15 @@ export default function ForexArbPage() {
       setSuccessMsg('Configuração salva.');
       setTimeout(() => setSuccessMsg(null), 2500);
     } catch (err: any) { setError(err.message); }
+  };
+
+  // Alterna uma corretora na lista allowedExchanges (rastreamento de oportunidades)
+  const toggleExchange = async (ex: string) => {
+    const current = settings ?? DEFAULT_SETTINGS;
+    let curr = Array.isArray(current.allowedExchanges) ? [...current.allowedExchanges] : [];
+    if (curr.includes(ex)) curr = curr.filter((a: string) => a !== ex);
+    else curr = [...curr, ex];
+    await updateSettingsField('allowedExchanges', curr);
   };
 
   return (
@@ -384,6 +404,36 @@ export default function ForexArbPage() {
               <input type="number" value={s.scanIntervalMs} onChange={e => updateSettingsField('scanIntervalMs', Number(e.target.value))}
                 className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-white" />
             </div>
+          </div>
+          <div className="border-t border-white/10 pt-4">
+            <span className="block text-xs text-slate-400 mb-2">Corretoras Rastreadas (oportunidades)</span>
+            {exchangeKeys.length === 0 ? (
+              <span className="text-slate-600 text-xs italic">Nenhuma corretora cadastrada — adicione em Exchange Integrations → Corretoras Centralizadas (CEX)</span>
+            ) : (
+              <div className="flex flex-wrap gap-4">
+                {Array.from(new Set(exchangeKeys.map(ek => ek.exchangeId))).map(ex => {
+                  const isChecked = Array.isArray(s.allowedExchanges) && s.allowedExchanges.includes(ex);
+                  return (
+                    <label key={ex} className="flex items-center gap-2 text-slate-200 text-sm cursor-pointer hover:text-white transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleExchange(ex)}
+                        className="h-4 w-4 rounded border-white/20 bg-slate-900 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900"
+                      />
+                      {ex.toUpperCase()}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            {Array.isArray(s.allowedExchanges) && s.allowedExchanges.length > 0 && (
+              <div className="flex gap-2 mt-3">
+                {s.allowedExchanges.map(ex => (
+                  <span key={ex} className="px-2 py-1 bg-indigo-500/20 text-indigo-300 font-semibold rounded text-xs">{ex.toUpperCase()}</span>
+                ))}
+              </div>
+            )}
           </div>
         </>
         ); })()}

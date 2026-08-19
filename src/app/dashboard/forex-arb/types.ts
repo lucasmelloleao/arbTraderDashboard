@@ -77,3 +77,10 @@ export interface ConfirmState {
   message: string;
   onConfirm: () => void;
 }
+
+export interface ExchangeKey {
+  _id: string;
+  name: string;
+  exchangeId: string;
+  isTestnet?: boolean;
+}
