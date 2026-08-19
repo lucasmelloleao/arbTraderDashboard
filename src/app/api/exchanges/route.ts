@@ -5,11 +5,16 @@ import { withAuth } from '@/lib/auth';
 import { encryptSecretKey } from '@/lib/encryption';
 
 const CTRADER_IDS = ['ctrader', 'pepperstone'];
-const SECRET_FIELDS = ['apiSecret', 'clientSecret', 'accessToken', 'refreshToken'];
+const FIX_IDS = ['fix', 'pepperstone-fix', 'ctrader-fix'];
+const SECRET_FIELDS = ['apiSecret', 'clientSecret', 'accessToken', 'refreshToken', 'password'];
 const HIDDEN_FIELDS = '-' + SECRET_FIELDS.join(' -');
 
 function isCtrader(exchangeId: string): boolean {
   return CTRADER_IDS.includes(exchangeId);
+}
+
+function isFix(exchangeId: string): boolean {
+  return FIX_IDS.includes(exchangeId);
 }
 
 function encryptFields(body: any, userId: string, exchangeId: string): Record<string, string> {
@@ -42,10 +47,12 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
         
         const { exchangeId, name, apiKey, apiSecret } = body;
         const isCtraderKey = isCtrader(exchangeId);
+        const isFixKey = isFix(exchangeId);
 
-        // cTrader exige clientId + clientSecret (+ accessToken). CEX exige apiKey + apiSecret.
+        // cTrader exige clientId + clientSecret; FIX exige host+senderCompId+username+password; CEX exige apiKey+apiSecret.
         const missingCtrader = isCtraderKey && (!body.clientId || !body.clientSecret);
-        if (!exchangeId || !name || (!isCtraderKey && (!apiKey || !apiSecret)) || (isCtraderKey && missingCtrader)) {
+        const missingFix = isFixKey && (!body.host || !body.senderCompId || !body.username || !body.password);
+        if (!exchangeId || !name || (!isCtraderKey && !isFixKey && (!apiKey || !apiSecret)) || (isCtraderKey && missingCtrader) || (isFixKey && missingFix)) {
             return NextResponse.json({ success: false, reason: 'Missing required fields' }, { status: 400 });
         }
 
@@ -55,9 +62,9 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
             userId,
             exchangeId,
             name: name.trim(),
-            // Para cTrader, espelha clientId em apiKey (o campo apiKey é required no schema)
-            apiKey: isCtraderKey ? (body.clientId || '').trim() : apiKey.trim(),
-            apiSecret: encrypted.apiSecret || (isCtraderKey ? 'ctrader' : encryptSecretKey(apiSecret.trim(), `${userId}-${exchangeId}`)),
+            // Para cTrader, espelha clientId em apiKey; para FIX, espelha senderCompId (apiKey é required no schema)
+            apiKey: isCtraderKey ? (body.clientId || '').trim() : isFixKey ? (body.senderCompId || '').trim() : apiKey.trim(),
+            apiSecret: encrypted.apiSecret || (isCtraderKey ? 'ctrader' : isFixKey ? (encrypted.password || 'fix') : encryptSecretKey(apiSecret.trim(), `${userId}-${exchangeId}`)),
             active: true,
             ...(isCtraderKey ? {
                 clientId: (body.clientId || '').trim(),
@@ -66,6 +73,16 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
                 refreshToken: encrypted.refreshToken || '',
                 accountId: body.accountId ? String(body.accountId).trim() : '',
                 environment: body.environment === 'demo' ? 'demo' : 'live',
+            } : {}),
+            ...(isFixKey ? {
+                host: (body.host || '').trim(),
+                quotePort: body.quotePort ? Number(body.quotePort) : 5211,
+                tradePort: body.tradePort ? Number(body.tradePort) : 5212,
+                senderCompId: (body.senderCompId || '').trim(),
+                targetCompId: (body.targetCompId || 'CSERVER').trim(),
+                username: String(body.username || '').trim(),
+                password: encrypted.password || '',
+                heartBtInt: body.heartBtInt ? Number(body.heartBtInt) : 30,
             } : {}),
         });
 
@@ -102,21 +119,37 @@ export const PUT = withAuth(async (req: NextRequest, userId: string) => {
         const body = await req.json();
         const { id, exchangeId, name, apiKey, apiSecret } = body;
         const isCtraderKey = isCtrader(exchangeId);
+        const isFixKey = isFix(exchangeId);
 
-        if (!id || !exchangeId || !name || (!isCtraderKey && !apiKey)) {
+        if (!id || !exchangeId || !name || (!isCtraderKey && !isFixKey && !apiKey)) {
             return NextResponse.json({ success: false, reason: 'Missing required fields' }, { status: 400 });
+        }
+        if (isFixKey && (!body.host || !body.senderCompId || !body.username)) {
+            return NextResponse.json({ success: false, reason: 'FIX: host, senderCompId e username são obrigatórios' }, { status: 400 });
         }
 
         const updateData: any = {
             exchangeId,
             name: name.trim(),
-            ...(!isCtraderKey ? { apiKey: apiKey.trim() } : {}),
+            ...(!isCtraderKey && !isFixKey ? { apiKey: apiKey.trim() } : {}),
         };
 
         if (isCtraderKey) {
             if (body.clientId) updateData.clientId = String(body.clientId).trim();
             if (body.accountId) updateData.accountId = String(body.accountId).trim();
             if (body.environment) updateData.environment = body.environment === 'demo' ? 'demo' : 'live';
+            const encrypted = encryptFields(body, userId, exchangeId);
+            for (const [k, v] of Object.entries(encrypted)) {
+                updateData[k] = v;
+            }
+        } else if (isFixKey) {
+            if (body.host) updateData.host = String(body.host).trim();
+            if (body.quotePort) updateData.quotePort = Number(body.quotePort);
+            if (body.tradePort) updateData.tradePort = Number(body.tradePort);
+            if (body.senderCompId) updateData.senderCompId = String(body.senderCompId).trim();
+            if (body.targetCompId) updateData.targetCompId = String(body.targetCompId).trim();
+            if (body.username) updateData.username = String(body.username).trim();
+            if (body.heartBtInt) updateData.heartBtInt = Number(body.heartBtInt);
             const encrypted = encryptFields(body, userId, exchangeId);
             for (const [k, v] of Object.entries(encrypted)) {
                 updateData[k] = v;

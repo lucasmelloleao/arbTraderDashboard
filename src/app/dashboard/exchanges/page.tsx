@@ -13,10 +13,12 @@ const SUPPORTED_EXCHANGES = [
   { id: 'okx', name: 'OKX' },
   { id: 'bybit', name: 'Bybit' },
   { id: 'gateio', name: 'Gate.io' },
-  { id: 'ctrader', name: 'cTrader (Pepperstone)' }
+  { id: 'ctrader', name: 'cTrader (Pepperstone)' },
+  { id: 'fix', name: 'FIX API (Pepperstone)' }
 ];
 
 const CTRADER_IDS = ['ctrader', 'pepperstone'];
+const FIX_IDS = ['fix', 'pepperstone-fix', 'ctrader-fix'];
 
 type ExchangeKey = {
   _id: string;
@@ -26,6 +28,11 @@ type ExchangeKey = {
   clientId?: string;
   accountId?: string;
   environment?: string;
+  host?: string;
+  senderCompId?: string;
+  username?: string;
+  quotePort?: number;
+  tradePort?: number;
   active: boolean;
   createdAt: string;
 };
@@ -66,6 +73,14 @@ export default function ExchangesPage() {
   const [refreshToken, setRefreshToken] = useState('');
   const [accountId, setAccountId] = useState('');
   const [environment, setEnvironment] = useState<'live' | 'demo'>('live');
+  // FIX API fields
+  const [fixHost, setFixHost] = useState('');
+  const [fixQuotePort, setFixQuotePort] = useState('5211');
+  const [fixTradePort, setFixTradePort] = useState('5212');
+  const [fixSenderCompId, setFixSenderCompId] = useState('');
+  const [fixTargetCompId, setFixTargetCompId] = useState('CSERVER');
+  const [fixUsername, setFixUsername] = useState('');
+  const [fixPassword, setFixPassword] = useState('');
   const [cexLoading, setCexLoading] = useState(false);
   const [editingCexId, setEditingCexId] = useState<string | null>(null);
   const [isCexFormOpen, setIsCexFormOpen] = useState(false);
@@ -138,6 +153,7 @@ export default function ExchangesPage() {
     const url = '/api/exchanges';
     const method = editingCexId ? 'PUT' : 'POST';
     const isCtraderKey = CTRADER_IDS.includes(exchangeId);
+    const isFixKey = FIX_IDS.includes(exchangeId);
     const baseBody: any = { exchangeId, name: cexName };
     if (isCtraderKey) {
       Object.assign(baseBody, {
@@ -147,6 +163,16 @@ export default function ExchangesPage() {
         refreshToken,
         accountId,
         environment,
+      });
+    } else if (isFixKey) {
+      Object.assign(baseBody, {
+        host: fixHost,
+        quotePort: fixQuotePort,
+        tradePort: fixTradePort,
+        senderCompId: fixSenderCompId,
+        targetCompId: fixTargetCompId,
+        username: fixUsername,
+        password: fixPassword,
       });
     } else {
       Object.assign(baseBody, { apiKey, apiSecret });
@@ -196,6 +222,13 @@ export default function ExchangesPage() {
     setRefreshToken('');
     setAccountId('');
     setEnvironment('live');
+    setFixHost('');
+    setFixQuotePort('5211');
+    setFixTradePort('5212');
+    setFixSenderCompId('');
+    setFixTargetCompId('CSERVER');
+    setFixUsername('');
+    setFixPassword('');
     setEditingCexId(null);
     setIsCexFormOpen(false);
   };
@@ -207,12 +240,20 @@ export default function ExchangesPage() {
     setApiKey(exchange.apiKey);
     setApiSecret(''); // Leave blank to keep existing secret
     const isCtraderKey = CTRADER_IDS.includes(exchange.exchangeId);
+    const isFixKey = FIX_IDS.includes(exchange.exchangeId);
     setClientId(isCtraderKey ? (exchange.clientId || exchange.apiKey) : '');
     setClientSecret(''); // Leave blank to keep existing
     setAccessToken('');
     setRefreshToken('');
     setAccountId(isCtraderKey ? (exchange.accountId || '') : '');
     setEnvironment(isCtraderKey ? (exchange.environment === 'demo' ? 'demo' : 'live') : 'live');
+    setFixHost(isFixKey ? (exchange.host || '') : '');
+    setFixQuotePort(isFixKey ? String(exchange.quotePort || 5211) : '5211');
+    setFixTradePort(isFixKey ? String(exchange.tradePort || 5212) : '5212');
+    setFixSenderCompId(isFixKey ? (exchange.senderCompId || '') : '');
+    setFixTargetCompId('CSERVER');
+    setFixUsername(isFixKey ? (exchange.username || '') : '');
+    setFixPassword('');
     setIsCexFormOpen(true);
   };
 
@@ -468,6 +509,12 @@ export default function ExchangesPage() {
                           {exchange.accountId && <> · Account: {exchange.accountId}</>}
                           {exchange.environment && <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${exchange.environment === 'demo' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{exchange.environment.toUpperCase()}</span>}
                         </>
+                      ) : FIX_IDS.includes(exchange.exchangeId) ? (
+                        <>
+                          {exchange.host && <span className="text-slate-400">{exchange.host}</span>}
+                          {exchange.senderCompId && <span className="text-slate-500"> · {exchange.senderCompId}</span>}
+                          {exchange.username && <span className="text-slate-500"> · a/c {exchange.username}</span>}
+                        </>
                       ) : (
                         <>Chave: {exchange.apiKey.substring(0, 8)}...{exchange.apiKey.substring(exchange.apiKey.length - 4)}</>
                       )}
@@ -552,6 +599,46 @@ export default function ExchangesPage() {
                         >
                           {cexLoading ? 'Salvando...' : 'Autorizar cTrader'}
                         </button>
+                      </div>
+                    </div>
+                  </>
+                ) : FIX_IDS.includes(exchangeId) ? (
+                  <>
+                    <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-3 text-xs text-emerald-200/80">
+                      Credenciais da <b>FIX API</b> (Pepperstone/cTrader). Encontre em <span className="font-mono text-emerald-300">cTrader → Configurações → FIX API</span>. A senha será criptografada (AES-256-GCM). Portas: QUOTE 5211 / TRADE 5212 (SSL).
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Host (Quote/Trade)</label>
+                        <input required type="text" value={fixHost} onChange={e => setFixHost(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 font-mono text-sm" placeholder="Ex: live-us-eqx-01.p.c-trader.com" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">SenderCompID</label>
+                        <input required type="text" value={fixSenderCompId} onChange={e => setFixSenderCompId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 font-mono text-sm" placeholder="Ex: live.pepperstone.1382148" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Username (Login da conta)</label>
+                        <input required type="text" value={fixUsername} onChange={e => setFixUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 font-mono text-sm" placeholder="Ex: 1382148" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Password {editingCexId && <span className="text-xs text-orange-400">(vazio = manter)</span>}</label>
+                        <input type="password" required={!editingCexId} value={fixPassword} onChange={e => setFixPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 font-mono text-sm" placeholder={editingCexId ? "Deixe em branco para manter" : "Senha FIX da conta"} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Porta Quote (SSL)</label>
+                        <input type="number" value={fixQuotePort} onChange={e => setFixQuotePort(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 font-mono text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Porta Trade (SSL)</label>
+                        <input type="number" value={fixTradePort} onChange={e => setFixTradePort(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 font-mono text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">TargetCompID</label>
+                        <input type="text" value={fixTargetCompId} onChange={e => setFixTargetCompId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 font-mono text-sm" />
                       </div>
                     </div>
                   </>

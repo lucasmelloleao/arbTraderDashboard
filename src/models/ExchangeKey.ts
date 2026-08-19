@@ -22,6 +22,15 @@ const ExchangeKeySchema = new mongoose.Schema({
   accountId: { type: String },
   environment: { type: String, enum: ['live', 'demo'], default: 'live' },
   ctraderTokenUpdatedAt: { type: Date },
+  // ─── FIX API (Pepperstone/cTrader) ──────────────────────────────────────────
+  host: { type: String },           // ex: live-us-eqx-01.p.c-trader.com
+  quotePort: { type: Number },      // 5211
+  tradePort: { type: Number },      // 5212
+  senderCompId: { type: String },   // ex: live.pepperstone.1382148
+  targetCompId: { type: String, default: 'CSERVER' },
+  username: { type: String },       // login numérico da conta
+  password: { type: String },       // criptografado
+  heartBtInt: { type: Number, default: 30 },
   createdAt: { type: Date, default: Date.now }
 });
 
