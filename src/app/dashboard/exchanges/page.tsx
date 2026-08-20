@@ -297,6 +297,28 @@ export default function ExchangesPage() {
     return SUPPORTED_EXCHANGES.find(e => e.id === id)?.name || id;
   };
 
+  // Conecta a carteira (MetaMask/Rabby/outra que injete window.ethereum) e
+  // preenche o endereço MASTER automaticamente no formulário Hyperliquid.
+  const connectWallet = async () => {
+    const w = (window as any).ethereum;
+    if (!w) {
+      alert('Nenhuma carteira detectada. Instale a MetaMask ou Rabby e recarregue a página.');
+      return;
+    }
+    try {
+      if (!w.selectedAddress) {
+        await w.request({ method: 'eth_requestAccounts' });
+      }
+      const accounts = await w.request({ method: 'eth_accounts' });
+      const addr = Array.isArray(accounts) && accounts.length ? accounts[0] : w.selectedAddress;
+      if (!addr) { alert('Não foi possível obter o endereço da carteira.'); return; }
+      setApiKey(addr);
+      alert(`Carteira conectada: ${addr.slice(0, 8)}...${addr.slice(-4)}\nAgora gere o AGENT na Hyperliquid (More → API) e cole a private key abaixo.`);
+    } catch (e: any) {
+      alert(`Falha ao conectar a carteira: ${e?.message || 'erro'}`);
+    }
+  };
+
   // ==========================================
   // DEX FUNCTIONS
   // ==========================================
@@ -694,11 +716,21 @@ export default function ExchangesPage() {
                 ) : HYPERLIQUID_IDS.includes(exchangeId) ? (
                   <>
                     <div className="rounded-lg bg-fuchsia-500/5 border border-fuchsia-500/20 p-3 text-xs text-fuchsia-200/80">
-                      Credenciais da <b>Hyperliquid</b> (DEX de perpétuos, sem KYC) com <b>Agent Wallet</b> — segurança máxima: a private key do <b>AGENT</b> (gerada em app.hyperliquid.xyz → More → API) fica no servidor e só pode operar; <b>não pode sacar</b>. O <b>MASTER</b> é o endereço da sua conta principal (onde está o USDC). A private key do agent será criptografada (AES-256-GCM).
+                      <b>Hyperliquid</b> (DEX de perpétuos, sem KYC) com <b>Agent Wallet</b> — a private key do <b>AGENT</b> fica no servidor e só pode operar (não saca). O <b>MASTER</b> é sua conta principal (onde está o USDC). A private key será criptografada (AES-256-GCM).
+                      <ol className="list-decimal ml-4 mt-2 space-y-1">
+                        <li>Clique em <b>Conectar Carteira</b> para preencher o MASTER automaticamente (MetaMask/Rabby).</li>
+                        <li>Deposite USDC (rede Arbitrum) em <a href="https://app.hyperliquid.xyz/trade" target="_blank" rel="noopener noreferrer" className="text-fuchsia-300 underline">app.hyperliquid.xyz</a> e gere o AGENT em <a href="https://app.hyperliquid.xyz/portfolio" target="_blank" rel="noopener noreferrer" className="text-fuchsia-300 underline">More → API</a> (Generate API Wallet → Authorize).</li>
+                        <li>Cole a private key do AGENT abaixo e registre.</li>
+                      </ol>
                     </div>
                     <div>
                       <label className="block text-sm text-slate-400 mb-1">Endereço MASTER (conta principal, 0x...)</label>
-                      <input required type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder="0x... (onde está o USDC)" />
+                      <div className="flex gap-2">
+                        <input required type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder="0x... (onde está o USDC)" />
+                        <button type="button" onClick={connectWallet} className="shrink-0 px-3 py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-sm font-medium transition-colors">
+                          Conectar Carteira
+                        </button>
+                      </div>
                       <p className="text-xs text-slate-500 mt-1">É o endereço da sua wallet principal — não a do agent.</p>
                     </div>
                     <div>

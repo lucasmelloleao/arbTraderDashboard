@@ -27,6 +27,58 @@ function isHyperliquid(exchangeId: string): boolean {
   return HYPERLIQUID_IDS.includes(exchangeId);
 }
 
+// Valida uma chave Hyperliquid: deriva o AGENT da private key e confirma que o
+// MASTER existe na rede. Não envia ordens — apenas leitura pública.
+async function validateHyperliquidKey(apiKey: string, apiSecret: string): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    // 1. Deriva o endereço do AGENT a partir da private key (ethers)
+    const { Wallet } = await import('ethers');
+    let agentAddress: string;
+    try {
+      const wallet = new Wallet(apiSecret.startsWith('0x') ? apiSecret : `0x${apiSecret}`);
+      agentAddress = wallet.address;
+    } catch {
+      return { ok: false, reason: 'Private key do AGENT inválida' };
+    }
+
+    // 2. Consulta o estado do MASTER (conta principal) — valida que a conta existe
+    const master = apiKey.toLowerCase();
+    const res = await fetch('https://api.hyperliquid.xyz/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'clearinghouseState', user: master }),
+      cache: 'no-store',
+    });
+    const data = await res.json();
+    if (!res.ok || !data || typeof data !== 'object' || data.error) {
+      return { ok: false, reason: 'Endereço MASTER inválido ou conta não encontrada na Hyperliquid' };
+    }
+
+    // 3. Tenta confirmar que o AGENT está autorizado (extraAgents) — se conseguir
+    //    ler a lista e o agent não estiver, avisa (não bloqueia: formato pode variar).
+    try {
+      const agentsRes = await fetch('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'extraAgents', user: master }),
+        cache: 'no-store',
+      });
+      const agents = await agentsRes.json().catch(() => null);
+      if (Array.isArray(agents)) {
+        const agentList = agents.map((a: any) => String(a?.agentAddress || a?.agent || a?.address || '').toLowerCase());
+        const authorized = agentList.includes(agentAddress.toLowerCase());
+        if (agentList.length > 0 && !authorized) {
+          return { ok: false, reason: 'AGENT não autorizado: gere o API Wallet em app.hyperliquid.xyz (More → API → Authorize) usando a carteira MASTER' };
+        }
+      }
+    } catch { /* não bloqueia */ }
+
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, reason: `Falha ao validar chave Hyperliquid: ${e?.message || 'erro'}` };
+  }
+}
+
 function encryptFields(body: any, userId: string, exchangeId: string): Record<string, string> {
   const authContext = `${userId}-${exchangeId}`;
   const out: Record<string, string> = {};
@@ -66,6 +118,14 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
         const missingCred = isCredentialKey && (!body.username || !body.password);
         if (!exchangeId || !name || (!isCtraderKey && !isCredentialKey && (!apiKey || !apiSecret)) || (isCtraderKey && missingCtrader) || (isCredentialKey && missingCred)) {
             return NextResponse.json({ success: false, reason: 'Missing required fields' }, { status: 400 });
+        }
+
+        // Hyperliquid: valida a chave (private key do agent + master) antes de salvar
+        if (isHyperliquid(exchangeId) && apiSecret) {
+            const validation = await validateHyperliquidKey(apiKey, apiSecret);
+            if (!validation.ok) {
+                return NextResponse.json({ success: false, reason: validation.reason }, { status: 400 });
+            }
         }
 
         const encrypted = encryptFields(body, userId, exchangeId);
@@ -144,6 +204,14 @@ export const PUT = withAuth(async (req: NextRequest, userId: string) => {
         }
         if (isDukascopyKey && !body.username) {
             return NextResponse.json({ success: false, reason: 'Dukascopy: username é obrigatório' }, { status: 400 });
+        }
+
+        // Hyperliquid: valida a chave quando apiSecret novo é fornecido
+        if (isHyperliquid(exchangeId) && apiSecret && apiSecret.trim() !== '') {
+            const validation = await validateHyperliquidKey(apiKey, apiSecret);
+            if (!validation.ok) {
+                return NextResponse.json({ success: false, reason: validation.reason }, { status: 400 });
+            }
         }
 
         const updateData: any = {
