@@ -22,6 +22,7 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
     }
 
     // 1. Notifica o serviço do bot via Redis pub/sub se disponível
+    let redisPublished = false;
     if (redis) {
       try {
         await redis.publish('perp-arb-control', JSON.stringify({ 
@@ -29,9 +30,14 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
           strategyId: strat ? String(strat._id) : (strategyId || ''),
           perpSymbol: perpSymbol || strat?.perpSymbol || ''
         }));
+        redisPublished = true;
       } catch (err) {
         console.error('Erro ao publicar CLOSE no Redis:', err);
       }
+    }
+
+    if (!strat) {
+      return NextResponse.json({ error: 'Estratégia não encontrada' }, { status: 404 });
     }
 
     // 2. Calcula PnL estimado de fecho com base nas informações mais recentes
@@ -58,7 +64,10 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
       realizedPnL = spotPnL + perpPnL + fundingCollected;
     }
 
-    // 3. Registra trade de fechamento
+    // 3. Registra trade de fechamento como PENDENTE (detected).
+    //    O bot (perp-close-executor) é quem executa as ordens reais e atualiza
+    //    para 'executed' (ou 'failed'). Marcar como 'executed' aqui fazia o dedup
+    //    do bot abortar o fechamento real — o trade aparecia fechado sem ordens.
     const closeTrade = await PerpArbTrade.create({
       userId,
       strategyId: strat._id,
@@ -66,24 +75,24 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
       perpSymbol: strat.perpSymbol,
       spotSymbol: strat.spotSymbol,
       type: 'close_hedge',
-      status: 'executed',
+      status: 'detected',
       amount: positionSize,
       spotPrice: lastSpot || undefined,
       perpPrice: lastPerp || undefined,
       pnl: Number(realizedPnL.toFixed(4)),
+      reason: 'Comando Manual (Dashboard / UI)',
     });
 
-    // 4. Reseta os dados de posição aberta na estratégia
-    strat.positionOpen = false;
-    strat.positionSize = 0;
-    strat.positionOpenedAt = null;
-    strat.fundingCollected = 0;
-    await strat.save();
+    // NÃO zera a posição aqui — o bot faz isso após confirmar as ordens.
+    // Se o Redis não está disponível, avisa que o bot pode não processar.
 
     return NextResponse.json({
       success: true,
-      message: `Posição [${strat.name}] encerrada com sucesso!`,
+      message: redisPublished
+        ? `Fechamento de [${strat.name}] acionado — o robô está executando as ordens.`
+        : `Atenção: Redis indisponível. O fechamento de [${strat.name}] foi registrado como pendente, mas o robô pode não processá-lo.`,
       pnl: realizedPnL,
+      status: 'detected',
       trade: closeTrade
     });
 

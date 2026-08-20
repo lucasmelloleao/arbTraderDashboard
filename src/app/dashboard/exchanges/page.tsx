@@ -14,11 +14,13 @@ const SUPPORTED_EXCHANGES = [
   { id: 'bybit', name: 'Bybit' },
   { id: 'gateio', name: 'Gate.io' },
   { id: 'ctrader', name: 'cTrader (Pepperstone)' },
-  { id: 'fix', name: 'FIX API (Pepperstone)' }
+  { id: 'fix', name: 'FIX API (Pepperstone)' },
+  { id: 'dukascopy', name: 'Dukascopy (JForex)' }
 ];
 
 const CTRADER_IDS = ['ctrader', 'pepperstone'];
 const FIX_IDS = ['fix', 'pepperstone-fix', 'ctrader-fix'];
+const DUKASCOPY_IDS = ['dukascopy'];
 
 type ExchangeKey = {
   _id: string;
@@ -34,6 +36,7 @@ type ExchangeKey = {
   username?: string;
   quotePort?: number;
   tradePort?: number;
+  jnlpUrl?: string;
   active: boolean;
   createdAt: string;
 };
@@ -82,6 +85,7 @@ export default function ExchangesPage() {
   const [fixTargetCompId, setFixTargetCompId] = useState('CSERVER');
   const [fixUsername, setFixUsername] = useState('');
   const [fixPassword, setFixPassword] = useState('');
+  const [dukaJnlpUrl, setDukaJnlpUrl] = useState('http://platform.dukascopy.com/demo_3/jforex_3.jnlp');
   const [cexLoading, setCexLoading] = useState(false);
   const [editingCexId, setEditingCexId] = useState<string | null>(null);
   const [isCexFormOpen, setIsCexFormOpen] = useState(false);
@@ -155,6 +159,7 @@ export default function ExchangesPage() {
     const method = editingCexId ? 'PUT' : 'POST';
     const isCtraderKey = CTRADER_IDS.includes(exchangeId);
     const isFixKey = FIX_IDS.includes(exchangeId);
+    const isDukascopyKey = DUKASCOPY_IDS.includes(exchangeId);
     const baseBody: any = { exchangeId, name: cexName };
     if (isCtraderKey) {
       Object.assign(baseBody, {
@@ -174,6 +179,12 @@ export default function ExchangesPage() {
         targetCompId: fixTargetCompId,
         username: fixUsername,
         password: fixPassword,
+      });
+    } else if (isDukascopyKey) {
+      Object.assign(baseBody, {
+        username: fixUsername,
+        password: fixPassword,
+        jnlpUrl: dukaJnlpUrl,
       });
     } else {
       Object.assign(baseBody, { apiKey, apiSecret });
@@ -232,6 +243,7 @@ export default function ExchangesPage() {
     setFixTargetCompId('CSERVER');
     setFixUsername('');
     setFixPassword('');
+    setDukaJnlpUrl('http://platform.dukascopy.com/demo_3/jforex_3.jnlp');
     setEditingCexId(null);
     setIsCexFormOpen(false);
   };
@@ -244,6 +256,7 @@ export default function ExchangesPage() {
     setApiSecret(''); // Leave blank to keep existing secret
     const isCtraderKey = CTRADER_IDS.includes(exchange.exchangeId);
     const isFixKey = FIX_IDS.includes(exchange.exchangeId);
+    const isDukascopyKey = DUKASCOPY_IDS.includes(exchange.exchangeId);
     setClientId(isCtraderKey ? (exchange.clientId || exchange.apiKey) : '');
     setClientSecret(''); // Leave blank to keep existing
     setAccessToken('');
@@ -255,8 +268,9 @@ export default function ExchangesPage() {
     setFixTradePort(isFixKey ? String(exchange.tradePort || 5212) : '5212');
     setFixSenderCompId(isFixKey ? (exchange.senderCompId || '') : '');
     setFixTargetCompId(isFixKey ? (exchange.targetCompId || 'CSERVER') : 'CSERVER');
-    setFixUsername(isFixKey ? (exchange.username || '') : '');
+    setFixUsername((isFixKey || isDukascopyKey) ? (exchange.username || '') : '');
     setFixPassword('');
+    setDukaJnlpUrl(isDukascopyKey ? (exchange.jnlpUrl || 'http://platform.dukascopy.com/demo_3/jforex_3.jnlp') : 'http://platform.dukascopy.com/demo_3/jforex_3.jnlp');
     setIsCexFormOpen(true);
   };
 
@@ -518,6 +532,11 @@ export default function ExchangesPage() {
                           {exchange.senderCompId && <span className="text-slate-500"> · {exchange.senderCompId}</span>}
                           {exchange.username && <span className="text-slate-500"> · a/c {exchange.username}</span>}
                         </>
+                      ) : DUKASCOPY_IDS.includes(exchange.exchangeId) ? (
+                        <>
+                          <span className="text-slate-400">Dukascopy</span>
+                          {exchange.username && <span className="text-slate-500"> · {exchange.username}</span>}
+                        </>
                       ) : (
                         <>Chave: {exchange.apiKey.substring(0, 8)}...{exchange.apiKey.substring(exchange.apiKey.length - 4)}</>
                       )}
@@ -643,6 +662,26 @@ export default function ExchangesPage() {
                         <label className="block text-sm text-slate-400 mb-1">TargetCompID</label>
                         <input type="text" value={fixTargetCompId} onChange={e => setFixTargetCompId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 font-mono text-sm" />
                       </div>
+                    </div>
+                  </>
+                ) : DUKASCOPY_IDS.includes(exchangeId) ? (
+                  <>
+                    <div className="rounded-lg bg-purple-500/5 border border-purple-500/20 p-3 text-xs text-purple-200/80">
+                      Credenciais da <b>Dukascopy</b> (JForex SDK via ponte Java). Use o login/senha da sua conta Dukascopy (demo ou live). A senha será criptografada (AES-256-GCM). A ponte Java precisa estar rodando no servidor (<span className="font-mono text-purple-300">run-bridge.bat</span>).
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Username (Login da conta)</label>
+                        <input required type="text" value={fixUsername} onChange={e => setFixUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500 font-mono text-sm" placeholder="Ex: demo.123456" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Password {editingCexId && <span className="text-xs text-orange-400">(vazio = manter)</span>}</label>
+                        <input type="password" required={!editingCexId} value={fixPassword} onChange={e => setFixPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500 font-mono text-sm" placeholder={editingCexId ? "Deixe em branco para manter" : "Senha da conta Dukascopy"} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">JNLP URL <span className="text-xs text-slate-500">(demo ou live)</span></label>
+                      <input type="text" value={dukaJnlpUrl} onChange={e => setDukaJnlpUrl(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500 font-mono text-sm" />
                     </div>
                   </>
                 ) : (

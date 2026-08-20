@@ -31,6 +31,8 @@ const ExchangeKeySchema = new mongoose.Schema({
   username: { type: String },       // login numérico da conta
   password: { type: String },       // criptografado
   heartBtInt: { type: Number, default: 30 },
+  // ─── Dukascopy (JForex SDK via ponte Java) ──────────────────────────────────
+  jnlpUrl: { type: String },        // ex: http://platform.dukascopy.com/demo_3/jforex_3.jnlp
   createdAt: { type: Date, default: Date.now }
 });
 
