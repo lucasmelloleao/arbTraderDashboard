@@ -1,0 +1,34 @@
+import mongoose from 'mongoose';
+
+const HyperliquidStrategySchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  exchangeKeyId: { type: mongoose.Schema.Types.ObjectId, ref: 'ExchangeKey', required: true },
+  name: { type: String, required: true },
+  perpSymbol: { type: String, required: true },
+  spotSymbol: { type: String, required: true },
+  fundingRate: { type: Number, default: 0 },
+  tradeSize: { type: Number, default: 100 },
+  minFundingRatePct: { type: Number, default: 0.01 },
+  expectedFundingPct: { type: Number, default: 0 },
+  maxSlippagePct: { type: Number, default: 0.1 },
+  maxDailyLoss: { type: Number, default: 10 },
+  dailyLossAccum: { type: Number, default: 0 },
+  markPx: { type: Number, default: 0 },
+  volume24hUSD: { type: Number, default: 0 },
+  autoExecute: { type: Boolean, default: true },
+  isAutoCreated: { type: Boolean, default: true },
+  active: { type: Boolean, default: true },
+  positionOpen: { type: Boolean, default: false },
+  positionOpenedAt: { type: Date },
+  positionSize: { type: Number, default: 0 },
+  fundingCollected: { type: Number, default: 0 },
+  fundingCount: { type: Number, default: 0 },
+  lastSpotPrice: { type: Number },
+  lastPerpPrice: { type: Number },
+  status: { type: String, enum: ['open', 'closed', 'failed'], default: 'open' },
+  pnl: { type: Number, default: 0 },
+  closedAt: { type: Date },
+  createdAt: { type: Date, default: Date.now },
+}, { collection: 'hyperliquidstrategies' });
+
+export default mongoose.models.HyperliquidStrategy || mongoose.model('HyperliquidStrategy', HyperliquidStrategySchema);

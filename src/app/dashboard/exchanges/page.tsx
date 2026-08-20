@@ -246,6 +246,7 @@ export default function ExchangesPage() {
     setFixUsername('');
     setFixPassword('');
     setDukaJnlpUrl('http://platform.dukascopy.com/demo_3/jforex_3.jnlp');
+    setConnectedWallet('');
     setEditingCexId(null);
     setIsCexFormOpen(false);
   };
@@ -273,6 +274,7 @@ export default function ExchangesPage() {
     setFixUsername((isFixKey || isDukascopyKey) ? (exchange.username || '') : '');
     setFixPassword('');
     setDukaJnlpUrl(isDukascopyKey ? (exchange.jnlpUrl || 'http://platform.dukascopy.com/demo_3/jforex_3.jnlp') : 'http://platform.dukascopy.com/demo_3/jforex_3.jnlp');
+    setConnectedWallet('');
     setIsCexFormOpen(true);
   };
 
@@ -299,6 +301,7 @@ export default function ExchangesPage() {
 
   // Conecta a carteira (MetaMask/Rabby/outra que injete window.ethereum) e
   // preenche o endereço MASTER automaticamente no formulário Hyperliquid.
+  const [connectedWallet, setConnectedWallet] = useState<string>('');
   const connectWallet = async () => {
     const w = (window as any).ethereum;
     if (!w) {
@@ -313,10 +316,28 @@ export default function ExchangesPage() {
       const addr = Array.isArray(accounts) && accounts.length ? accounts[0] : w.selectedAddress;
       if (!addr) { alert('Não foi possível obter o endereço da carteira.'); return; }
       setApiKey(addr);
+      setConnectedWallet(addr);
       alert(`Carteira conectada: ${addr.slice(0, 8)}...${addr.slice(-4)}\nAgora gere o AGENT na Hyperliquid (More → API) e cole a private key abaixo.`);
     } catch (e: any) {
       alert(`Falha ao conectar a carteira: ${e?.message || 'erro'}`);
     }
+  };
+
+  // Desconecta a carteira (revoga a permissão do site) e limpa o campo MASTER.
+  const disconnectWallet = async () => {
+    const w = (window as any).ethereum;
+    if (w?.request) {
+      try {
+        // MetaMask/Rabby: revoga as permissões do site (o usuário poderá escolher outra conta)
+        await w.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
+      } catch (e: any) {
+        // Algumas wallets não suportam; apenas limpa o campo
+        console.warn('Falha ao revogar permissão:', e?.message);
+      }
+    }
+    setConnectedWallet('');
+    if (apiKey) setApiKey('');
+    alert('Carteira desconectada. Clique em "Conectar Carteira" para escolher outra.');
   };
 
   // ==========================================
@@ -727,10 +748,19 @@ export default function ExchangesPage() {
                       <label className="block text-sm text-slate-400 mb-1">Endereço MASTER (conta principal, 0x...)</label>
                       <div className="flex gap-2">
                         <input required type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder="0x... (onde está o USDC)" />
-                        <button type="button" onClick={connectWallet} className="shrink-0 px-3 py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-sm font-medium transition-colors">
-                          Conectar Carteira
-                        </button>
+                        {connectedWallet ? (
+                          <button type="button" onClick={disconnectWallet} className="shrink-0 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors" title={connectedWallet}>
+                            Desconectar
+                          </button>
+                        ) : (
+                          <button type="button" onClick={connectWallet} className="shrink-0 px-3 py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-sm font-medium transition-colors">
+                            Conectar Carteira
+                          </button>
+                        )}
                       </div>
+                      {connectedWallet && (
+                        <p className="text-xs text-emerald-400 mt-1 font-mono">Conectado: {connectedWallet.slice(0, 10)}...{connectedWallet.slice(-4)}</p>
+                      )}
                       <p className="text-xs text-slate-500 mt-1">É o endereço da sua wallet principal — não a do agent.</p>
                     </div>
                     <div>
