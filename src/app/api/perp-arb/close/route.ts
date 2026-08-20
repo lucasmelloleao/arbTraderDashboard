@@ -40,7 +40,7 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
       return NextResponse.json({ error: 'Estratégia não encontrada' }, { status: 404 });
     }
 
-    // 2. Calcula PnL estimado de fecho com base nas informações mais recentes
+    // 2. Calcula PnL estimado apenas para a resposta informativa (não cria trade)
     const positionSize = Number(strat.positionSize || strat.tradeSize || 0);
     const fundingCollected = Number(strat.fundingCollected || 0);
 
@@ -64,36 +64,18 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
       realizedPnL = spotPnL + perpPnL + fundingCollected;
     }
 
-    // 3. Registra trade de fechamento como PENDENTE (detected).
-    //    O bot (perp-close-executor) é quem executa as ordens reais e atualiza
-    //    para 'executed' (ou 'failed'). Marcar como 'executed' aqui fazia o dedup
-    //    do bot abortar o fechamento real — o trade aparecia fechado sem ordens.
-    const closeTrade = await PerpArbTrade.create({
-      userId,
-      strategyId: strat._id,
-      strategyName: strat.name,
-      perpSymbol: strat.perpSymbol,
-      spotSymbol: strat.spotSymbol,
-      type: 'close_hedge',
-      status: 'detected',
-      amount: positionSize,
-      spotPrice: lastSpot || undefined,
-      perpPrice: lastPerp || undefined,
-      pnl: Number(realizedPnL.toFixed(4)),
-      reason: 'Comando Manual (Dashboard / UI)',
-    });
-
-    // NÃO zera a posição aqui — o bot faz isso após confirmar as ordens.
-    // Se o Redis não está disponível, avisa que o bot pode não processar.
+    // NÃO cria o trade aqui. O bot (perp-close-executor, via Redis) é quem cria
+    // o close_hedge com status 'detected' e executa as ordens reais, atualizando
+    // para 'executed'/'failed'. Se a API criasse o trade, a trava anti-duplicação
+    // do bot (hasRecentCloseInFlight) abortava o fechamento real.
 
     return NextResponse.json({
       success: true,
       message: redisPublished
         ? `Fechamento de [${strat.name}] acionado — o robô está executando as ordens.`
-        : `Atenção: Redis indisponível. O fechamento de [${strat.name}] foi registrado como pendente, mas o robô pode não processá-lo.`,
+        : `Atenção: Redis indisponível. O fechamento de [${strat.name}] NÃO foi enviado ao robô. Verifique o servidor.`,
       pnl: realizedPnL,
       status: 'detected',
-      trade: closeTrade
     });
 
   } catch (error: any) {
