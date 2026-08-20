@@ -62,7 +62,7 @@ const translations = {
 
     // Exchanges
     integracoesExchange: 'Integrações de Exchange',
-    corretorasCentralizadas: 'Corretoras Centralizadas (CEX)',
+    corretorasCentralizadas: 'Integrações de Trading (CEX/DEX)',
     corretorasDescentralizadas: 'Corretoras Descentralizadas (DEX / Wallets)',
     novaCEX: 'Nova CEX',
     gerenciamentoAPI: 'Gerenciamento de API Keys',
@@ -185,7 +185,7 @@ const translations = {
     usuario: 'User',
 
     integracoesExchange: 'Exchange Integrations',
-    corretorasCentralizadas: 'Centralized Exchanges (CEX)',
+    corretorasCentralizadas: 'Trading Integrations (CEX/DEX)',
     corretorasDescentralizadas: 'Decentralized Exchanges (DEX / Wallets)',
     novaCEX: 'New CEX',
     gerenciamentoAPI: 'API Key Management',

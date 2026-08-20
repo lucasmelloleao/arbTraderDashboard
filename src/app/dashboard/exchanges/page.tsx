@@ -509,7 +509,7 @@ export default function ExchangesPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             {exchanges.length === 0 ? (
               <div className="col-span-full p-8 border border-dashed border-slate-700 rounded-xl text-center text-slate-500">
-                Nenhuma corretora registrada. Adicione uma abaixo.
+                Nenhuma integração registrada. Adicione uma abaixo.
               </div>
             ) : exchanges.map(exchange => (
               <div key={exchange._id} className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm hover:border-slate-700 transition-colors">
@@ -694,16 +694,17 @@ export default function ExchangesPage() {
                 ) : HYPERLIQUID_IDS.includes(exchangeId) ? (
                   <>
                     <div className="rounded-lg bg-fuchsia-500/5 border border-fuchsia-500/20 p-3 text-xs text-fuchsia-200/80">
-                      Credenciais da <b>Hyperliquid</b> (DEX de perpétuos, sem KYC). Use o <b>endereço da wallet</b> (0x...) e a <b>private key</b> da sua conta Hyperliquid (app.hyperliquid.xyz → API). A private key será criptografada (AES-256-GCM). Cuidado: nunca compartilhe a private key.
+                      Credenciais da <b>Hyperliquid</b> (DEX de perpétuos, sem KYC) com <b>Agent Wallet</b> — segurança máxima: a private key do <b>AGENT</b> (gerada em app.hyperliquid.xyz → More → API) fica no servidor e só pode operar; <b>não pode sacar</b>. O <b>MASTER</b> é o endereço da sua conta principal (onde está o USDC). A private key do agent será criptografada (AES-256-GCM).
                     </div>
                     <div>
-                      <label className="block text-sm text-slate-400 mb-1">Endereço da Wallet (0x...)</label>
-                      <input required type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder="0x..." />
+                      <label className="block text-sm text-slate-400 mb-1">Endereço MASTER (conta principal, 0x...)</label>
+                      <input required type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder="0x... (onde está o USDC)" />
+                      <p className="text-xs text-slate-500 mt-1">É o endereço da sua wallet principal — não a do agent.</p>
                     </div>
                     <div>
-                      <label className="block text-sm text-slate-400 mb-1">Private Key {editingCexId && <span className="text-xs text-orange-400">(vazio = manter)</span>}</label>
-                      <input type="password" required={!editingCexId} value={apiSecret} onChange={e => setApiSecret(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder={editingCexId ? "Deixe em branco para manter" : "Private key da wallet"} />
-                      <p className="text-xs text-slate-500 mt-1">Será criptografada via AES-256-GCM antes de ser salva no banco.</p>
+                      <label className="block text-sm text-slate-400 mb-1">Private Key do AGENT (API wallet) {editingCexId && <span className="text-xs text-orange-400">(vazio = manter)</span>}</label>
+                      <input type="password" required={!editingCexId} value={apiSecret} onChange={e => setApiSecret(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder={editingCexId ? "Deixe em branco para manter" : "Private key gerada na tela de API"} />
+                      <p className="text-xs text-slate-500 mt-1">Será criptografada via AES-256-GCM. O agent NÃO consegue sacar fundos.</p>
                     </div>
                   </>
                 ) : (
