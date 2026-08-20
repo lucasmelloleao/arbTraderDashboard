@@ -109,6 +109,43 @@ export default function HyperliquidPage() {
     }
   };
 
+  // Edição das configurações globais
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [settingsForm, setSettingsForm] = useState<any>({});
+  const startEditingSettings = () => {
+    setSettingsForm({
+      tradeSize: settings?.tradeSize ?? 100,
+      minFundingRatePct: settings?.minFundingRatePct ?? 0.01,
+      minVolume24hUSD: settings?.minVolume24hUSD ?? 500000,
+      maxStrategiesPerScan: settings?.maxStrategiesPerScan ?? 5,
+      maxDailyLoss: settings?.maxDailyLoss ?? 10,
+    });
+    setIsEditingSettings(true);
+  };
+  const saveSettings = async (form: any) => {
+    try {
+      const res = await fetch('/api/hyperliquid/settings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          tradeSize: Number(form.tradeSize),
+          minFundingRatePct: Number(form.minFundingRatePct),
+          minVolume24hUSD: Number(form.minVolume24hUSD),
+          maxStrategiesPerScan: Number(form.maxStrategiesPerScan),
+          maxDailyLoss: Number(form.maxDailyLoss),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Falha ao salvar');
+      setSettings(data);
+      setIsEditingSettings(false);
+      setSuccessMsg('⚙️ Configurações salvas.');
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    }
+  };
+
   const fetchLogs = async () => {
     if (loadingLogs) return;
     setLoadingLogs(true);
@@ -204,6 +241,72 @@ export default function HyperliquidPage() {
           Nenhuma chave Hyperliquid cadastrada. Adicione em <b>Integrações de Trading</b> (opção Hyperliquid DEX) com o endereço MASTER + private key do AGENT.
         </div>
       )}
+
+      {/* Quadro de Configurações Globais */}
+      <div className="rounded-xl border border-indigo-500/20 bg-slate-900/80 p-4 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+            <span className="text-indigo-400">⚙️</span> Configurações Globais do Robô
+          </h2>
+          {!isEditingSettings ? (
+            <button onClick={startEditingSettings} className="text-xs font-semibold text-indigo-300 hover:text-white underline">Editar</button>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => setIsEditingSettings(false)} className="text-xs font-semibold text-slate-400 hover:text-white underline">Cancelar</button>
+              <button onClick={() => saveSettings(settingsForm)} className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 underline">Salvar</button>
+            </div>
+          )}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-5 text-sm">
+          <div>
+            <span className="block text-xs text-slate-500 mb-1">Colheita Automática</span>
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold ${settings?.isScanningEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}`}>
+              <span className={`h-2 w-2 rounded-full ${settings?.isScanningEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+              {settings?.isScanningEnabled ? 'Ativa' : 'Pausada'}
+            </span>
+          </div>
+          <div>
+            <span className="block text-xs text-slate-500 mb-1">Aporte p/ Posição (USDC)</span>
+            {!isEditingSettings ? (
+              <span className="font-bold text-white">${settings?.tradeSize ?? 100}</span>
+            ) : (
+              <input type="number" value={settingsForm.tradeSize} onChange={(e) => setSettingsForm({ ...settingsForm, tradeSize: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+            )}
+          </div>
+          <div>
+            <span className="block text-xs text-slate-500 mb-1">Funding Mínimo (%)</span>
+            {!isEditingSettings ? (
+              <span className="font-bold text-white">{settings?.minFundingRatePct ?? 0.01}%</span>
+            ) : (
+              <input type="number" step="0.001" value={settingsForm.minFundingRatePct} onChange={(e) => setSettingsForm({ ...settingsForm, minFundingRatePct: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+            )}
+          </div>
+          <div>
+            <span className="block text-xs text-slate-500 mb-1">Vol 24h Mínimo (USDC)</span>
+            {!isEditingSettings ? (
+              <span className="font-bold text-white">${(settings?.minVolume24hUSD ?? 500000).toLocaleString()}</span>
+            ) : (
+              <input type="number" value={settingsForm.minVolume24hUSD} onChange={(e) => setSettingsForm({ ...settingsForm, minVolume24hUSD: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+            )}
+          </div>
+          <div>
+            <span className="block text-xs text-slate-500 mb-1">Max Estratégias / Scan</span>
+            {!isEditingSettings ? (
+              <span className="font-bold text-white">{settings?.maxStrategiesPerScan ?? 5}</span>
+            ) : (
+              <input type="number" min="1" value={settingsForm.maxStrategiesPerScan} onChange={(e) => setSettingsForm({ ...settingsForm, maxStrategiesPerScan: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+            )}
+          </div>
+          <div className="sm:col-span-5 border-t border-white/10 pt-3">
+            <span className="block text-xs text-slate-500 mb-1">Max Perda Diária (USDC)</span>
+            {!isEditingSettings ? (
+              <span className="font-bold text-white">${settings?.maxDailyLoss ?? 10}</span>
+            ) : (
+              <input type="number" value={settingsForm.maxDailyLoss} onChange={(e) => setSettingsForm({ ...settingsForm, maxDailyLoss: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Account + Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
