@@ -7,6 +7,7 @@ import { encryptSecretKey } from '@/lib/encryption';
 const CTRADER_IDS = ['ctrader', 'pepperstone'];
 const FIX_IDS = ['fix', 'pepperstone-fix', 'ctrader-fix'];
 const DUKASCOPY_IDS = ['dukascopy'];
+const HYPERLIQUID_IDS = ['hyperliquid'];
 const SECRET_FIELDS = ['apiSecret', 'clientSecret', 'accessToken', 'refreshToken', 'password'];
 const HIDDEN_FIELDS = '-' + SECRET_FIELDS.join(' -');
 
@@ -20,6 +21,10 @@ function isFix(exchangeId: string): boolean {
 
 function isDukascopy(exchangeId: string): boolean {
   return DUKASCOPY_IDS.includes(exchangeId);
+}
+
+function isHyperliquid(exchangeId: string): boolean {
+  return HYPERLIQUID_IDS.includes(exchangeId);
 }
 
 function encryptFields(body: any, userId: string, exchangeId: string): Record<string, string> {

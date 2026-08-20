@@ -33,6 +33,8 @@ const ExchangeKeySchema = new mongoose.Schema({
   heartBtInt: { type: Number, default: 30 },
   // ─── Dukascopy (JForex SDK via ponte Java) ──────────────────────────────────
   jnlpUrl: { type: String },        // ex: http://platform.dukascopy.com/demo_3/jforex_3.jnlp
+  // ─── Hyperliquid (DEX perpétuos) ────────────────────────────────────────────
+  // apiKey = endereço público (0x...), apiSecret = private key criptografada
   createdAt: { type: Date, default: Date.now }
 });
 

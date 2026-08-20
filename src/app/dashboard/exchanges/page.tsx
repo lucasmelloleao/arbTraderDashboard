@@ -15,12 +15,14 @@ const SUPPORTED_EXCHANGES = [
   { id: 'gateio', name: 'Gate.io' },
   { id: 'ctrader', name: 'cTrader (Pepperstone)' },
   { id: 'fix', name: 'FIX API (Pepperstone)' },
-  { id: 'dukascopy', name: 'Dukascopy (JForex)' }
+  { id: 'dukascopy', name: 'Dukascopy (JForex)' },
+  { id: 'hyperliquid', name: 'Hyperliquid (DEX)' }
 ];
 
 const CTRADER_IDS = ['ctrader', 'pepperstone'];
 const FIX_IDS = ['fix', 'pepperstone-fix', 'ctrader-fix'];
 const DUKASCOPY_IDS = ['dukascopy'];
+const HYPERLIQUID_IDS = ['hyperliquid'];
 
 type ExchangeKey = {
   _id: string;
@@ -537,6 +539,11 @@ export default function ExchangesPage() {
                           <span className="text-slate-400">Dukascopy</span>
                           {exchange.username && <span className="text-slate-500"> · {exchange.username}</span>}
                         </>
+                      ) : HYPERLIQUID_IDS.includes(exchange.exchangeId) ? (
+                        <>
+                          <span className="text-slate-400">Hyperliquid</span>
+                          <span className="text-slate-500"> · {exchange.apiKey.substring(0, 10)}...{exchange.apiKey.substring(exchange.apiKey.length - 4)}</span>
+                        </>
                       ) : (
                         <>Chave: {exchange.apiKey.substring(0, 8)}...{exchange.apiKey.substring(exchange.apiKey.length - 4)}</>
                       )}
@@ -682,6 +689,21 @@ export default function ExchangesPage() {
                     <div>
                       <label className="block text-sm text-slate-400 mb-1">JNLP URL <span className="text-xs text-slate-500">(demo ou live)</span></label>
                       <input type="text" value={dukaJnlpUrl} onChange={e => setDukaJnlpUrl(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-purple-500 font-mono text-sm" />
+                    </div>
+                  </>
+                ) : HYPERLIQUID_IDS.includes(exchangeId) ? (
+                  <>
+                    <div className="rounded-lg bg-fuchsia-500/5 border border-fuchsia-500/20 p-3 text-xs text-fuchsia-200/80">
+                      Credenciais da <b>Hyperliquid</b> (DEX de perpétuos, sem KYC). Use o <b>endereço da wallet</b> (0x...) e a <b>private key</b> da sua conta Hyperliquid (app.hyperliquid.xyz → API). A private key será criptografada (AES-256-GCM). Cuidado: nunca compartilhe a private key.
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Endereço da Wallet (0x...)</label>
+                      <input required type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder="0x..." />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Private Key {editingCexId && <span className="text-xs text-orange-400">(vazio = manter)</span>}</label>
+                      <input type="password" required={!editingCexId} value={apiSecret} onChange={e => setApiSecret(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white outline-none focus:border-fuchsia-500 font-mono text-sm" placeholder={editingCexId ? "Deixe em branco para manter" : "Private key da wallet"} />
+                      <p className="text-xs text-slate-500 mt-1">Será criptografada via AES-256-GCM antes de ser salva no banco.</p>
                     </div>
                   </>
                 ) : (
