@@ -54,6 +54,8 @@ export default function HyperliquidPage() {
   const [hasKey, setHasKey] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<any>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Logs
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
@@ -66,20 +68,44 @@ export default function HyperliquidPage() {
     setLoading(true);
     setError(null);
     try {
-      const [stratRes, tradeRes, accRes] = await Promise.all([
+      const [stratRes, tradeRes, accRes, setRes] = await Promise.all([
         fetch('/api/hyperliquid/strategies', { headers: authHeaders() }),
         fetch('/api/hyperliquid/trades', { headers: authHeaders() }),
         fetch('/api/hyperliquid/account', { headers: authHeaders() }),
+        fetch('/api/hyperliquid/settings', { headers: authHeaders() }),
       ]);
-      const [strats, trds, acc] = await Promise.all([stratRes.json(), tradeRes.json(), accRes.json()]);
+      const [strats, trds, acc, sets] = await Promise.all([stratRes.json(), tradeRes.json(), accRes.json(), setRes.json()]);
       if (Array.isArray(strats)) setStrategies(strats);
       if (Array.isArray(trds)) setTrades(trds);
       setHasKey(acc?.hasKey ?? false);
       setAccount(acc?.account ?? null);
+      setSettings(sets || null);
     } catch (e: any) {
       setError(e?.message || 'Falha ao carregar dados');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Alterna a colheita automática (isScanningEnabled)
+  const toggleHarvest = async () => {
+    const newStatus = !settings?.isScanningEnabled;
+    try {
+      const res = await fetch('/api/hyperliquid/settings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ isScanningEnabled: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Falha ao atualizar');
+      setSettings(data);
+      setSuccessMsg(newStatus
+        ? '🌾 Colheita INICIADA! O robô agora escaneia e opera na Hyperliquid.'
+        : '🛑 Colheita PAUSADA.');
+      setTimeout(() => setSuccessMsg(null), 5000);
+      setTimeout(fetchAll, 2000);
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
     }
   };
 
@@ -142,11 +168,34 @@ export default function HyperliquidPage() {
           <span className={`px-3 py-1 rounded-full text-xs font-bold ${hasKey ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
             {hasKey ? 'Chave conectada' : 'Sem chave cadastrada'}
           </span>
+          {/* Botão de Colheita Automática */}
+          <button
+            onClick={toggleHarvest}
+            disabled={!hasKey}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold transition-all shadow-lg hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed ${
+              settings?.isScanningEnabled
+                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 border border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
+                : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+            }`}
+          >
+            {settings?.isScanningEnabled ? (
+              <>
+                <span className="h-2 w-2 rounded-full bg-slate-950 animate-ping" />
+                🛑 Parar Colheita (Ativa)
+              </>
+            ) : (
+              <>🌾 Iniciar Colheita</>
+            )}
+          </button>
           <button onClick={fetchAll} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors">
             <RefreshCw className="w-4 h-4" /> Atualizar
           </button>
         </div>
       </div>
+
+      {successMsg && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-3 rounded-lg text-sm">{successMsg}</div>
+      )}
 
       {error && <div className="bg-red-500/10 border border-red-500/30 text-red-300 p-3 rounded-lg text-sm">{error}</div>}
 
