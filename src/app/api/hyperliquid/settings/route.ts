@@ -22,7 +22,7 @@ export const POST = withAuth(async (req: NextRequest, userId: string) => {
     await connectToDatabase();
     const body = await req.json();
 
-    const allowed = ['isScanningEnabled', 'tradeSize', 'minFundingRatePct', 'minVolume24hUSD', 'maxStrategiesPerScan', 'maxDailyLoss'];
+    const allowed = ['isScanningEnabled', 'tradeSize', 'minFundingRatePct', 'minVolume24hUSD', 'maxStrategiesPerScan', 'maxDailyLoss', 'takeProfitPricePct', 'trailingStopPct'];
     const update: any = {};
     for (const k of allowed) {
       if (body[k] !== undefined) {

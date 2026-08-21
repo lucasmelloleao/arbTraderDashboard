@@ -34,10 +34,13 @@ type HLStrategy = {
 type HLTrade = {
   _id: string;
   strategyName?: string;
+  perpSymbol?: string;
+  spotSymbol?: string;
   type: string;
   status: string;
   amount: number;
   realizedPnl?: number;
+  fundingRate?: number;
   spotPrice?: number;
   perpPrice?: number;
   perpOrderId?: string;
@@ -45,6 +48,47 @@ type HLTrade = {
   reason?: string;
   errorMessage?: string;
   createdAt: string;
+};
+
+const TRADE_FILTERS = [
+  { key: 'all', label: 'Todas' },
+  { key: 'open', label: 'Entradas' },
+  { key: 'close', label: 'Fechamentos' },
+  { key: 'error', label: 'Erros' },
+  { key: 'funding', label: 'Funding' },
+] as const;
+type TradeFilterKey = (typeof TRADE_FILTERS)[number]['key'];
+
+function formatPnl(value?: number | null): string {
+  if (value === undefined || value === null) return '—';
+  const sign = value >= 0 ? '+' : '−';
+  const abs = Math.abs(value);
+  const digits = abs >= 1 ? 2 : 4;
+  return `${sign}$${abs.toFixed(digits)}`;
+}
+
+function formatDayLabel(d: Date): string {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Hoje';
+  if (d.toDateString() === yesterday.toDateString()) return 'Ontem';
+  return d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  executed: 'text-emerald-400',
+  simulated: 'text-indigo-400',
+  detected: 'text-amber-400',
+  failed: 'text-red-400',
+  skipped: 'text-slate-500',
+};
+
+const TYPE_STYLES: Record<string, string> = {
+  open: 'bg-indigo-500/20 text-indigo-400',
+  close: 'bg-amber-500/20 text-amber-400',
+  funding: 'bg-sky-500/20 text-sky-400',
+  error: 'bg-red-500/20 text-red-400',
 };
 
 export default function HyperliquidPage() {
@@ -63,6 +107,11 @@ export default function HyperliquidPage() {
   const [logLines, setLogLines] = useState(150);
   const [lastUpdateLogs, setLastUpdateLogs] = useState<string | null>(null);
   const terminalContainerRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Trades recentes — filtros
+  const [tradeFilter, setTradeFilter] = useState<TradeFilterKey>('all');
+  const [tradeSearch, setTradeSearch] = useState('');
+  const [visibleTrades, setVisibleTrades] = useState(20);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -119,6 +168,8 @@ export default function HyperliquidPage() {
       minVolume24hUSD: settings?.minVolume24hUSD ?? 500000,
       maxStrategiesPerScan: settings?.maxStrategiesPerScan ?? 5,
       maxDailyLoss: settings?.maxDailyLoss ?? 10,
+      takeProfitPricePct: settings?.takeProfitPricePct ?? 3,
+      trailingStopPct: settings?.trailingStopPct ?? 1.5,
     });
     setIsEditingSettings(true);
   };
@@ -133,6 +184,8 @@ export default function HyperliquidPage() {
           minVolume24hUSD: Number(form.minVolume24hUSD),
           maxStrategiesPerScan: Number(form.maxStrategiesPerScan),
           maxDailyLoss: Number(form.maxDailyLoss),
+          takeProfitPricePct: Number(form.takeProfitPricePct),
+          trailingStopPct: Number(form.trailingStopPct),
         }),
       });
       const data = await res.json();
@@ -190,6 +243,34 @@ export default function HyperliquidPage() {
   const totalPnl = trades.reduce((acc, t) => acc + (t.realizedPnl ?? 0), 0);
   const openPositions = strategies.filter((s) => s.positionOpen);
   const executedCloses = trades.filter((t) => t.type === 'close' && t.status === 'executed');
+
+  const filteredTrades = useMemo(() => {
+    const q = tradeSearch.trim().toLowerCase();
+    return trades.filter((t) => {
+      if (tradeFilter !== 'all' && t.type !== tradeFilter) return false;
+      if (!q) return true;
+      return [t.strategyName, t.perpSymbol, t.spotSymbol, t.reason, t.status]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [trades, tradeFilter, tradeSearch]);
+
+  const groupedTrades = useMemo(() => {
+    const groups: { date: string; label: string; trades: HLTrade[] }[] = [];
+    for (const t of filteredTrades) {
+      const d = new Date(t.createdAt);
+      const key = d.toDateString();
+      let group = groups.find((g) => g.date === key);
+      if (!group) {
+        group = { date: key, label: formatDayLabel(d), trades: [] };
+        groups.push(group);
+      }
+      group.trades.push(t);
+    }
+    return groups;
+  }, [filteredTrades]);
+
+  const shownGroups = groupedTrades.slice(0, visibleTrades);
 
   return (
     <div className="space-y-6">
@@ -305,6 +386,22 @@ export default function HyperliquidPage() {
               <input type="number" value={settingsForm.maxDailyLoss} onChange={(e) => setSettingsForm({ ...settingsForm, maxDailyLoss: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
             )}
           </div>
+          <div>
+            <span className="block text-xs text-slate-500 mb-1">Take-Profit Valorização (%)</span>
+            {!isEditingSettings ? (
+              <span className="font-bold text-white">{settings?.takeProfitPricePct ?? 3}%</span>
+            ) : (
+              <input type="number" step="0.5" value={settingsForm.takeProfitPricePct} onChange={(e) => setSettingsForm({ ...settingsForm, takeProfitPricePct: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+            )}
+          </div>
+          <div>
+            <span className="block text-xs text-slate-500 mb-1">Trailing Stop (%)</span>
+            {!isEditingSettings ? (
+              <span className="font-bold text-white">{settings?.trailingStopPct ?? 1.5}%</span>
+            ) : (
+              <input type="number" step="0.1" value={settingsForm.trailingStopPct} onChange={(e) => setSettingsForm({ ...settingsForm, trailingStopPct: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+            )}
+          </div>
         </div>
       </div>
 
@@ -366,44 +463,107 @@ export default function HyperliquidPage() {
 
       {/* Trades recentes */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl">
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-          <h2 className="font-bold text-white">Trades recentes</h2>
-          <span className="text-xs text-slate-500">{executedCloses.length} fechamentos executados</span>
+        <div className="p-5 border-b border-slate-800 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="font-bold text-white">Trades recentes</h2>
+            <span className="text-xs text-slate-500">
+              {executedCloses.length} fechamentos executados · {filteredTrades.length} trades listados
+            </span>
+          </div>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-1 flex-wrap">
+              {TRADE_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => { setTradeFilter(f.key); setVisibleTrades(20); }}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${tradeFilter === f.key ? 'bg-fuchsia-500/25 text-fuchsia-300 border border-fuchsia-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'}`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={tradeSearch}
+              onChange={(e) => { setTradeSearch(e.target.value); setVisibleTrades(20); }}
+              placeholder="Buscar estratégia, par, motivo..."
+              className="w-full sm:w-64 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-fuchsia-500/50"
+            />
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-900/50 text-slate-400 text-left">
               <tr>
+                <th className="px-4 py-3 font-medium">Data</th>
                 <th className="px-4 py-3 font-medium">Estratégia</th>
                 <th className="px-4 py-3 font-medium">Tipo</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Valor</th>
                 <th className="px-4 py-3 font-medium">PnL</th>
-                <th className="px-4 py-3 font-medium">Data</th>
+                <th className="px-4 py-3 font-medium">Funding</th>
+                <th className="px-4 py-3 font-medium">Ordens</th>
+                <th className="px-4 py-3 font-medium">Motivo / Erro</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
-              {trades.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Nenhum trade registrado.</td></tr>
-              ) : trades.slice(0, 20).map((t) => (
-                <tr key={t._id} className="hover:bg-slate-800/30">
-                  <td className="px-4 py-3 text-white">{t.strategyName || '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.type === 'open' ? 'bg-indigo-500/20 text-indigo-400' : t.type === 'close' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-400'}`}>{t.type}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs ${t.status === 'executed' ? 'text-emerald-400' : t.status === 'failed' ? 'text-red-400' : t.status === 'skipped' ? 'text-slate-500' : 'text-amber-400'}`}>{t.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-300">${t.amount}</td>
-                  <td className={`px-4 py-3 ${(t.realizedPnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {t.realizedPnl !== undefined && t.realizedPnl !== null ? `$${t.realizedPnl.toFixed(4)}` : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{new Date(t.createdAt).toLocaleString('pt-BR')}</td>
-                </tr>
+              {filteredTrades.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nenhum trade encontrado.</td></tr>
+              ) : shownGroups.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Você já viu todos os trades — ajuste os filtros para refinar.</td></tr>
+              ) : shownGroups.map((group) => (
+                <React.Fragment key={group.date}>
+                  <tr className="bg-slate-800/40">
+                    <td colSpan={9} className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-fuchsia-400">
+                      {group.label} · {group.trades.length} trade{group.trades.length === 1 ? '' : 's'}
+                    </td>
+                  </tr>
+                  {group.trades.map((t) => (
+                    <tr key={t._id} className="hover:bg-slate-800/30">
+                      <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{new Date(t.createdAt).toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-3 text-white">
+                        <span className="font-medium">{t.strategyName || '—'}</span>
+                        {t.perpSymbol && <span className="block text-[10px] text-slate-500">{t.perpSymbol}</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${TYPE_STYLES[t.type] || 'bg-slate-700 text-slate-400'}`}>{t.type}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs ${STATUS_STYLES[t.status] || 'text-amber-400'}`}>{t.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-300 whitespace-nowrap">${Number(t.amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className={`px-4 py-3 whitespace-nowrap ${(t.realizedPnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatPnl(t.realizedPnl)}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">
+                        {t.fundingRate !== undefined && t.fundingRate !== null ? `${(t.fundingRate * 100).toFixed(4)}%` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-[10px] font-mono text-slate-500">
+                        {t.perpOrderId || t.spotOrderId ? (
+                          <span className="block max-w-[140px] truncate" title={`PERP: ${t.perpOrderId || '—'}\nSPOT: ${t.spotOrderId || '—'}`}>
+                            P:{t.perpOrderId ? t.perpOrderId.slice(0, 8) : '—'} · S:{t.spotOrderId ? t.spotOrderId.slice(0, 8) : '—'}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {t.errorMessage ? (
+                          <span className="text-red-400" title={t.errorMessage}>{t.errorMessage.length > 60 ? t.errorMessage.slice(0, 60) + '…' : t.errorMessage}</span>
+                        ) : t.reason ? (
+                          <span className="text-slate-400" title={t.reason}>{t.reason.length > 60 ? t.reason.slice(0, 60) + '…' : t.reason}</span>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
         </div>
+        {filteredTrades.length > shownGroups.reduce((acc, g) => acc + g.trades.length, 0) && (
+          <div className="p-4 border-t border-slate-800 text-center">
+            <button onClick={() => setVisibleTrades((v) => v + 20)} className="text-xs font-semibold text-fuchsia-400 hover:text-fuchsia-300 underline">
+              Ver mais trades
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Terminal Logs */}

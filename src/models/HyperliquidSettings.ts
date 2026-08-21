@@ -8,6 +8,8 @@ const HyperliquidSettingsSchema = new mongoose.Schema({
   minVolume24hUSD: { type: Number, default: 500000 },
   maxStrategiesPerScan: { type: Number, default: 5 },
   maxDailyLoss: { type: Number, default: 10 },
+  takeProfitPricePct: { type: Number, default: 3 },
+  trailingStopPct: { type: Number, default: 1.5 },
   lastScannedAt: { type: Date },
 }, { collection: 'hyperliquidsettings' });
 
