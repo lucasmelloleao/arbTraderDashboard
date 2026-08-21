@@ -451,7 +451,9 @@ export default function PerpetualArbPage() {
     });
   };
 
-        useEffect(() => {
+        const [initialLoading, setInitialLoading] = useState(true);
+
+  useEffect(() => {
     let isPolling = false;
 
     const refresh = async () => {
@@ -466,6 +468,7 @@ export default function PerpetualArbPage() {
         ]);
       } finally {
         isPolling = false;
+        setInitialLoading(false);
       }
     };
 
@@ -532,14 +535,21 @@ export default function PerpetualArbPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-extrabold text-white">Arbitragem de Taxa de Funding</h1>
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
-              botOnline 
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]' 
-                : 'bg-red-500/20 text-red-300 border border-red-500/40'
-            }`}>
-              <span className={`h-2 w-2 rounded-full ${botOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-              {botOnline ? 'BOT OPERANTE' : 'BOT OFFLINE'}
-            </span>
+            {initialLoading ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider bg-slate-800 text-slate-400 border border-slate-700 animate-pulse">
+                <span className="h-2 w-2 rounded-full bg-slate-400 animate-ping" />
+                VERIFICANDO...
+              </span>
+            ) : (
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
+                botOnline 
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]' 
+                  : 'bg-red-500/20 text-red-300 border border-red-500/40'
+              }`}>
+                <span className={`h-2 w-2 rounded-full ${botOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                {botOnline ? 'BOT OPERANTE' : 'BOT OFFLINE'}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm text-slate-400">
             Estratégia delta-neutra: Long no Spot + Short no Perpétuo para receber taxas de funding com risco zero de mercado.
@@ -549,19 +559,26 @@ export default function PerpetualArbPage() {
         <div className="flex flex-wrap gap-2">
           {/* Botão de Colheita Automática */}
           <button
+            disabled={initialLoading || loadingSettings}
             onClick={() => {
               const newStatus = !settings?.isScanningEnabled;
               updateSettings({ isScanningEnabled: newStatus });
               setSuccessMsg(newStatus ? '🌾 Colheita Automática INICIADA! O robô agora está escaneando o mercado em busca de oportunidades de funding.' : '🛑 Colheita Automática PAUSADA.');
               setTimeout(() => setSuccessMsg(null), 5000);
             }}
-            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold transition-all shadow-lg hover:scale-105 ${
-              settings?.isScanningEnabled
-                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 border border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
-                : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold transition-all shadow-lg ${
+              initialLoading || loadingSettings
+                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
+                : settings?.isScanningEnabled
+                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 border border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)] hover:scale-105'
+                : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-105'
             }`}
           >
-            {settings?.isScanningEnabled ? (
+            {initialLoading || loadingSettings ? (
+              <>
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Carregando...
+              </>
+            ) : settings?.isScanningEnabled ? (
               <>
                 <span className="h-2 w-2 rounded-full bg-slate-950 animate-ping" />
                 🛑 Parar Colheita (Ativa)

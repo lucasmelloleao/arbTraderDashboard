@@ -27,6 +27,9 @@ export default function DashboardOverview() {
   const [spotUsdtOnly, setSpotUsdtOnly] = useState<number>(0);
   const [futuresUsdtOnly, setFuturesUsdtOnly] = useState<number>(0);
   const [spotCoins, setSpotCoins] = useState<any[]>([]);
+  const [rawSpotCoins, setRawSpotCoins] = useState<any[]>([]);
+  const [selectedExchangeFilter, setSelectedExchangeFilter] = useState<string>('all');
+  const [selectedFuturesExchangeFilter, setSelectedFuturesExchangeFilter] = useState<string>('all');
   const [futuresPositions, setFuturesPositions] = useState<any[]>([]);
     const [futuresUnrealizedPnl, setFuturesUnrealizedPnl] = useState<number>(0);
     const [lastSnapshotAt, setLastSnapshotAt] = useState<string | null>(null);
@@ -213,26 +216,32 @@ export default function DashboardOverview() {
                     const formattedChartData = Object.values(chartDataMap).sort((a: any, b: any) => a.time - b.time);
                     setHistoryData(formattedChartData);
 
-                    // Extrai o snapshot mais recente para o quadro de moedas spot + posições futuras
+                    // Extrai o snapshot mais recente para o quadro de moedas spot + posições futuras (se live não tiver carregado)
                     if (Array.isArray(history) && history.length > 0) {
                       const latest = [...history].sort((a: any, b: any) =>
                         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
                       )[0];
 
-                                            // Moedas spot (exclui o agregado do perp), ordenadas por valor USD decrescente
-                      const coins = (Array.isArray(latest.balances) ? latest.balances : [])
-                        .filter((b: any) => {
-                          const assetStr = String(b.asset || '').toLowerCase();
-                          return !assetStr.includes('perp') && !assetStr.includes('futures');
-                        })
-                        .filter((b: any) => Number(b.usdValue || 0) > 0 || Number(b.total || 0) > 0)
-                        .sort((a: any, b: any) => Number(b.usdValue || 0) - Number(a.usdValue || 0));
-            setSpotCoins(coins);
+                      setRawSpotCoins(prev => {
+                        if (prev && prev.length > 0) return prev;
+                        return Array.isArray(latest.balances) ? latest.balances : [];
+                      });
+                      setSpotCoins(prev => {
+                        if (prev && prev.length > 0) return prev;
+                        return (Array.isArray(latest.balances) ? latest.balances : [])
+                          .filter((b: any) => {
+                            const assetStr = String(b.asset || '').toLowerCase();
+                            return !assetStr.includes('perp') && !assetStr.includes('futures');
+                          })
+                          .filter((b: any) => Number(b.usdValue || 0) > 0 || Number(b.total || 0) > 0)
+                          .sort((a: any, b: any) => Number(b.usdValue || 0) - Number(a.usdValue || 0));
+                      });
 
-                      // Posições futuras, ordenadas por notional (valor USD) decrescente
-                      const positions = (Array.isArray(latest.positions) ? latest.positions : [])
-                        .sort((a: any, b: any) => Number(b.notional || 0) - Number(a.notional || 0));
-                      setFuturesPositions(positions);
+                      setFuturesPositions(prev => {
+                        if (prev && prev.length > 0) return prev;
+                        return (Array.isArray(latest.positions) ? latest.positions : [])
+                          .sort((a: any, b: any) => Number(b.notional || 0) - Number(a.notional || 0));
+                      });
                       setFuturesUnrealizedPnl(Number(latest.futuresUnrealizedPnl || 0));
                       setLastSnapshotAt(latest.timestamp || null);
                     }
@@ -266,6 +275,7 @@ export default function DashboardOverview() {
 
       // Atualiza quadros com dados ao vivo
       setSpotCoins(coins);
+      if (Array.isArray(data.rawSpotCoins)) setRawSpotCoins(data.rawSpotCoins);
       setFuturesPositions(positions);
       setFuturesUnrealizedPnl(Number(data.futuresUnrealizedPnl || 0));
       setLastSnapshotAt(data.timestamp || null);
@@ -278,6 +288,29 @@ export default function DashboardOverview() {
       const liveFutures = positions.reduce((s: number, p: any) => s + Number(p.notional || 0), 0);
       if (liveSpot > 0 || liveFutures > 0) {
         setTotalCexUsd(liveSpot + liveFutures);
+      }
+
+      // Atualiza o item da Hyperliquid na tabela "Saldos das Corretoras Conectadas" se tiver vindo do /live
+      const allCoins = Array.isArray(data.rawSpotCoins) ? data.rawSpotCoins : coins;
+      const hlCoins = allCoins.filter((c: any) => String(c.exchange || '').toLowerCase() === 'hyperliquid');
+      const hlPos = positions.filter((p: any) => String(p.exchange || '').toLowerCase() === 'hyperliquid');
+      const hlSpotUsd = hlCoins.reduce((s: number, c: any) => s + Number(c.usdValue || 0), 0);
+      const hlFutUsd = hlPos.reduce((s: number, p: any) => s + Number(p.notional || 0), 0);
+
+      if (hlSpotUsd > 0 || hlFutUsd > 0) {
+        setCexBalances(prev => {
+          if (!prev || prev.length === 0) return prev;
+          return prev.map((ex: any) => {
+            if (String(ex.exchangeId || '').toLowerCase() === 'hyperliquid') {
+              return {
+                ...ex,
+                spotTotalEquity: hlSpotUsd,
+                futuresTotalEquity: hlFutUsd,
+              };
+            }
+            return ex;
+          });
+        });
       }
 
       // Adiciona ponto ao gráfico (agrupado por 6h, consistente com os snapshots)
@@ -305,12 +338,11 @@ export default function DashboardOverview() {
     }
   };
 
-    useEffect(() => {
+  useEffect(() => {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
-    // Ao entrar na tela, carrega apenas os dados persistidos no banco.
-    // A atualização ao vivo só ocorre ao clicar no botão "Atualizar Saldos".
     fetchOverviewData(false);
+    fetchLiveData();
   }, []);
 
     // Aplica ordenação configurada nas tabelas (uma única vez por render)
@@ -483,27 +515,63 @@ export default function DashboardOverview() {
 
       {/* Quadro: Moedas Spot (quantidade + valor USD) */}
       <div>
-                        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-white">🪙 {t('moedasSpot')}</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl font-bold text-white">🪙 {t('moedasSpot')}</h3>
+            {/* Tag de Filtro por Corretora */}
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 p-1 rounded-lg text-xs">
+              <button
+                onClick={() => setSelectedExchangeFilter('all')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  selectedExchangeFilter === 'all'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                Todas
+              </button>
+              {Array.from(
+                new Set(
+                  (rawSpotCoins.length > 0 ? rawSpotCoins : spotCoins)
+                    .map((c: any) => c.exchange)
+                    .filter(Boolean)
+                )
+              ).map((exName: any) => (
+                <button
+                  key={exName}
+                  onClick={() => setSelectedExchangeFilter(exName)}
+                  className={`px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                    selectedExchangeFilter === exName
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  {exName}
+                </button>
+              ))}
+            </div>
+          </div>
           {lastSnapshotAt && (
             <span className="text-xs text-slate-500 font-mono">
               {t('atualizado')}: {new Date(lastSnapshotAt).toLocaleString()}
             </span>
           )}
         </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto shadow-sm">
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto shadow-sm">
           <table className="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
             <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400">
-                            <tr>
+              <tr>
                 {[
-                  { label: 'Moeda', key: 'asset', right: false },
+                  { label: 'Moeda / Exchange', key: 'asset', right: false },
                   { label: 'Quantidade', key: 'total', right: true },
                   { label: 'Preço Médio', key: 'avgCostPrice', right: true },
                   { label: 'Valor Posicionado', key: 'investedValue', right: true },
                   { label: 'Valor (USD)', key: 'usdValue', right: true },
                   { label: 'Lucro/Prejuízo', key: 'pnl', right: true },
                   { label: '% do Spot', key: 'pct', right: true },
-                ].map((col) => (                  <th
+                ].map((col) => (
+                  <th
                     key={col.key}
                     onClick={() => toggleSort(setSpotSort, col.key, spotSort)}
                     className={`px-6 py-4 font-medium cursor-pointer select-none hover:text-white transition-colors ${col.right ? 'text-right' : ''}`}
@@ -520,82 +588,103 @@ export default function DashboardOverview() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-                            {loading ? (
+              {loading ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-slate-500">{t('carregandoMoedas')}</td>
                 </tr>
-              ) : spotCoins.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">{t('nenhumaMoeda')}</td>
-                </tr>
-                            ) : (
-                sortedSpotCoins.map((coin: any, idx: number) => {
-                  const usd = Number(coin.usdValue || 0);
-                  const invested = Number(coin.investedValue || 0);
-                  const pnl = Number(coin.pnl || 0);
-                  const pnlPct = coin.pnlPct !== null && coin.pnlPct !== undefined ? Number(coin.pnlPct) : null;
-                  const avgCost = coin.avgCostPrice;
-                  const spotTotal = sortedSpotCoins.reduce((s: number, c: any) => s + Number(c.usdValue || 0), 0);
-                  const pct = spotTotal > 0 ? (usd / spotTotal) * 100 : 0;
-                  const pnlColor = pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+              ) : (() => {
+                const listToDisplay = selectedExchangeFilter === 'all'
+                  ? spotCoins
+                  : (rawSpotCoins.length > 0 ? rawSpotCoins : spotCoins).filter(
+                      (c: any) => String(c.exchange || '').toLowerCase() === selectedExchangeFilter.toLowerCase()
+                    );
+                const sortedList = applySort(listToDisplay, spotSort);
+
+                if (sortedList.length === 0) {
                   return (
-                    <tr key={coin.asset || idx} className="hover:bg-slate-800/30 transition-colors">
-                                            <td className="px-6 py-4">
-                                              <span className="mr-2 inline-flex align-middle"><CoinIcon asset={coin.asset} size={20} /></span>
-                                              <span className="font-semibold text-white">{coin.asset}</span>
-                        <span className="ml-2 text-xs text-slate-500 font-mono">≈ {usd.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT</span>
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-300">{Number(coin.total || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-400">{avgCost ? `$${Number(avgCost).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}` : '—'}</td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-300">
-                        {invested > 0 ? `$${invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-emerald-400 font-semibold">${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className={`px-6 py-4 text-right font-mono font-semibold ${pnlColor}`}>
-                        <div className="flex flex-col items-end leading-tight">
-                          <span>{pnl >= 0 ? '+' : ''}${Math.abs(pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          {pnlPct !== null && (
-                            <span className={`text-[11px] ${pnlColor}`}>
-                              {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-400">{pct.toFixed(2)}%</td>
+                    <tr>
+                      <td colSpan={7} className="px-6 py-8 text-center text-slate-500">{t('nenhumaMoeda')}</td>
                     </tr>
                   );
-                                })
-              )}
-              {!loading && spotCoins.length > 0 && (
-                <tr className="bg-slate-800/40 border-t-2 border-slate-700">
-                  <td className="px-6 py-4 font-bold text-white">Total</td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-white">
-                    {sortedSpotCoins.reduce((s: number, c: any) => s + Number(c.total || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}
-                  </td>
-                  <td className="px-6 py-4 text-right font-mono text-slate-400">—</td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-white">
-                    ${sortedSpotCoins.reduce((s: number, c: any) => s + Number(c.investedValue || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-emerald-400">
-                    ${sortedSpotCoins.reduce((s: number, c: any) => s + Number(c.usdValue || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-white">
-                    {(() => {
-                      const totalPnl = sortedSpotCoins.reduce((s: number, c: any) => s + Number(c.pnl || 0), 0);
-                      const totalInvested = sortedSpotCoins.reduce((s: number, c: any) => s + Number(c.investedValue || 0), 0);
-                      const pct = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
-                      const color = totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+                }
+
+                const spotTotal = sortedList.reduce((s: number, c: any) => s + Number(c.usdValue || 0), 0);
+
+                return (
+                  <>
+                    {sortedList.map((coin: any, idx: number) => {
+                      const usd = Number(coin.usdValue || 0);
+                      const invested = Number(coin.investedValue || 0);
+                      const pnl = Number(coin.pnl || 0);
+                      const pnlPct = coin.pnlPct !== null && coin.pnlPct !== undefined ? Number(coin.pnlPct) : null;
+                      const avgCost = coin.avgCostPrice;
+                      const pct = spotTotal > 0 ? (usd / spotTotal) * 100 : 0;
+                      const pnlColor = pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
                       return (
-                        <span className={color}>
-                          {totalPnl >= 0 ? '+' : ''}${totalPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          <span className="text-[11px]"> ({totalPnl >= 0 ? '+' : ''}{pct.toFixed(2)}%)</span>
-                        </span>
+                        <tr key={`${coin.exchange}-${coin.asset}-${idx}`} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="px-6 py-4 flex items-center gap-2">
+                            <span className="inline-flex align-middle"><CoinIcon asset={coin.asset} size={20} /></span>
+                            <div>
+                              <span className="font-semibold text-white">{coin.asset}</span>
+                              {coin.exchange && (
+                                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-indigo-300 font-semibold capitalize">
+                                  {coin.exchange}
+                                </span>
+                              )}
+                            </div>
+                            <span className="ml-auto text-xs text-slate-500 font-mono">≈ {usd.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT</span>
+                          </td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-300">{Number(coin.total || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-400">{avgCost ? `$${Number(avgCost).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })}` : '—'}</td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-300">
+                            {invested > 0 ? `$${invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                          </td>
+                          <td className="px-6 py-4 text-right font-mono text-emerald-400 font-semibold">${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className={`px-6 py-4 text-right font-mono font-semibold ${pnlColor}`}>
+                            <div className="flex flex-col items-end leading-tight">
+                              <span>{pnl >= 0 ? '+' : ''}${Math.abs(pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              {pnlPct !== null && (
+                                <span className={`text-[11px] ${pnlColor}`}>
+                                  {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-400">{pct.toFixed(2)}%</td>
+                        </tr>
                       );
-                    })()}
-                  </td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-slate-300">100%</td>
-                </tr>
-              )}
+                    })}
+                    <tr className="bg-slate-800/40 border-t-2 border-slate-700">
+                      <td className="px-6 py-4 font-bold text-white">Total</td>
+                      <td className="px-6 py-4 text-right font-mono font-bold text-white">
+                        {sortedList.reduce((s: number, c: any) => s + Number(c.total || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">—</td>
+                      <td className="px-6 py-4 text-right font-mono font-bold text-white">
+                        ${sortedList.reduce((s: number, c: any) => s + Number(c.investedValue || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono font-bold text-emerald-400">
+                        ${sortedList.reduce((s: number, c: any) => s + Number(c.usdValue || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono font-bold text-white">
+                        {(() => {
+                          const totalPnl = sortedList.reduce((s: number, c: any) => s + Number(c.pnl || 0), 0);
+                          const totalInvested = sortedList.reduce((s: number, c: any) => s + Number(c.investedValue || 0), 0);
+                          const pct = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
+                          const color = totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+                          return (
+                            <span className={color}>
+                              {totalPnl >= 0 ? '+' : ''}${totalPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              <span className="text-[11px]"> ({totalPnl >= 0 ? '+' : ''}{pct.toFixed(2)}%)</span>
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono font-bold text-slate-300">100%</td>
+                    </tr>
+                  </>
+                );
+              })()}
             </tbody>
           </table>
         </div>
@@ -603,18 +692,53 @@ export default function DashboardOverview() {
 
       {/* Quadro: Posições Futuras Abertas */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-white">📊 {t('posicoesFuturas')}</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl font-bold text-white">📊 {t('posicoesFuturas')}</h3>
+            {/* Tag de Filtro por Corretora para Posições Futuras */}
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 p-1 rounded-lg text-xs">
+              <button
+                onClick={() => setSelectedFuturesExchangeFilter('all')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  selectedFuturesExchangeFilter === 'all'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                Todas
+              </button>
+              {Array.from(
+                new Set(
+                  futuresPositions
+                    .map((p: any) => p.exchange)
+                    .filter(Boolean)
+                )
+              ).map((exName: any) => (
+                <button
+                  key={exName}
+                  onClick={() => setSelectedFuturesExchangeFilter(exName)}
+                  className={`px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                    selectedFuturesExchangeFilter === exName
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  {exName}
+                </button>
+              ))}
+            </div>
+          </div>
           <span className={`text-sm font-mono font-semibold ${futuresUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {t('pnlNaoRealizado')}: {futuresUnrealizedPnl >= 0 ? '+' : ''}${futuresUnrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
+
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto shadow-sm">
-                    <table className="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
+          <table className="w-full text-left text-sm whitespace-nowrap md:whitespace-normal">
             <thead className="bg-slate-900/50 border-b border-slate-800 text-slate-400">
               <tr>
                 {[
-                  { label: 'Símbolo', key: 'symbol', right: false },
+                  { label: 'Símbolo / Exchange', key: 'symbol', right: false },
                   { label: 'Lado', key: 'side', right: false },
                   { label: 'Contratos', key: 'contracts', right: true },
                   { label: 'Notional (USD)', key: 'notional', right: true },
@@ -645,78 +769,98 @@ export default function DashboardOverview() {
                 <tr>
                   <td colSpan={9} className="px-6 py-8 text-center text-slate-500">{t('carregandoPosicoes')}</td>
                 </tr>
-              ) : futuresPositions.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-slate-500">{t('nenhumaPosicao')}</td>
-                </tr>
-                            ) : (
-                sortedFuturesPositions.map((pos: any, idx: number) => {
-                  const pnl = Number(pos.unrealizedPnl || 0);
-                  const pnlPct = Number(pos.unrealizedPnlPct || 0);
-                  const pnlColor = pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+              ) : (() => {
+                const listToDisplay = selectedFuturesExchangeFilter === 'all'
+                  ? futuresPositions
+                  : futuresPositions.filter(
+                      (p: any) => String(p.exchange || '').toLowerCase() === selectedFuturesExchangeFilter.toLowerCase()
+                    );
+                const sortedList = applySort(listToDisplay, futuresSort);
+
+                if (sortedList.length === 0) {
                   return (
-                    <tr key={pos.symbol || idx} className="hover:bg-slate-800/30 transition-colors">
-                                            <td className="px-6 py-4">
-                                              <span className="mr-2 inline-flex align-middle"><CoinIcon asset={pos.symbol} size={20} /></span>
-                                              <span className="font-semibold text-white">{pos.symbol}</span>
-                        {pos.strategyName && (
-                          <span className="ml-2 text-xs text-slate-500">{pos.strategyName}</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold ${pos.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                          {String(pos.side || '?').toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-300">{Number(pos.contracts || 0).toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-300">${Number(pos.notional || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-400">
-                        {pos.entryPrice ? Number(pos.entryPrice).toFixed(6) : '—'}
-                        {pos.markPrice ? ` / ${Number(pos.markPrice).toFixed(6)}` : ''}
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-400">{Number(pos.leverage || 1)}x</td>
-                      <td className="px-6 py-4 text-right font-mono text-slate-400">${Number(pos.margin || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className={`px-6 py-4 text-right font-mono font-semibold ${pnlColor}`}>
-                        {pnl >= 0 ? '+' : ''}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className={`px-6 py-4 text-right font-mono ${pnlColor}`}>
-                        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
-                      </td>
+                    <tr>
+                      <td colSpan={9} className="px-6 py-8 text-center text-slate-500">{t('nenhumaPosicao')}</td>
                     </tr>
                   );
-                                })
-              )}
-              {!loading && futuresPositions.length > 0 && (
-                <tr className="bg-slate-800/40 border-t-2 border-slate-700">
-                  <td className="px-6 py-4 font-bold text-white">Total</td>
-                  <td className="px-6 py-4">—</td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-white">
-                    {sortedFuturesPositions.reduce((s: number, p: any) => s + Number(p.contracts || 0), 0).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-white">
-                    ${sortedFuturesPositions.reduce((s: number, p: any) => s + Number(p.notional || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-6 py-4 text-right font-mono text-slate-400">—</td>
-                  <td className="px-6 py-4 text-right font-mono text-slate-400">—</td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-white">
-                    ${sortedFuturesPositions.reduce((s: number, p: any) => s + Number(p.margin || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className={`px-6 py-4 text-right font-mono font-bold ${sortedFuturesPositions.reduce((s, p) => s + Number(p.unrealizedPnl || 0), 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {(() => {
-                      const totalPnl = sortedFuturesPositions.reduce((s, p) => s + Number(p.unrealizedPnl || 0), 0);
-                      return (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    })()}
-                  </td>
-                  <td className={`px-6 py-4 text-right font-mono font-bold ${sortedFuturesPositions.reduce((s, p) => s + Number(p.unrealizedPnl || 0), 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {(() => {
-                      const totalNotional = sortedFuturesPositions.reduce((s, p) => s + Number(p.notional || 0), 0);
-                      const totalPnl = sortedFuturesPositions.reduce((s, p) => s + Number(p.unrealizedPnl || 0), 0);
-                      const pct = totalNotional > 0 ? (totalPnl / totalNotional) * 100 : 0;
-                      return (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
-                    })()}
-                  </td>
-                </tr>
-              )}
+                }
+
+                return (
+                  <>
+                    {sortedList.map((pos: any, idx: number) => {
+                      const pnl = Number(pos.unrealizedPnl || 0);
+                      const pnlPct = Number(pos.unrealizedPnlPct || 0);
+                      const pnlColor = pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+                      return (
+                        <tr key={`${pos.exchange}-${pos.symbol}-${idx}`} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="px-6 py-4 flex items-center gap-2">
+                            <span className="inline-flex align-middle"><CoinIcon asset={pos.symbol} size={20} /></span>
+                            <div>
+                              <span className="font-semibold text-white">{pos.symbol}</span>
+                              {pos.exchange && (
+                                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-indigo-300 font-semibold capitalize">
+                                  {pos.exchange}
+                                </span>
+                              )}
+                              {pos.strategyName && (
+                                <span className="ml-2 text-xs text-slate-500">{pos.strategyName}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold ${pos.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                              {String(pos.side || '?').toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-300">{Number(pos.contracts || 0).toLocaleString()}</td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-300">${Number(pos.notional || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-400">
+                            {pos.entryPrice ? Number(pos.entryPrice).toFixed(6) : '—'}
+                            {pos.markPrice ? ` / ${Number(pos.markPrice).toFixed(6)}` : ''}
+                          </td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-400">{Number(pos.leverage || 1)}x</td>
+                          <td className="px-6 py-4 text-right font-mono text-slate-400">${Number(pos.margin || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className={`px-6 py-4 text-right font-mono font-semibold ${pnlColor}`}>
+                            {pnl >= 0 ? '+' : ''}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className={`px-6 py-4 text-right font-mono ${pnlColor}`}>
+                            {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-slate-800/40 border-t-2 border-slate-700">
+                      <td className="px-6 py-4 font-bold text-white">Total</td>
+                      <td className="px-6 py-4">—</td>
+                      <td className="px-6 py-4 text-right font-mono font-bold text-white">
+                        {sortedList.reduce((s: number, p: any) => s + Number(p.contracts || 0), 0).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono font-bold text-white">
+                        ${sortedList.reduce((s: number, p: any) => s + Number(p.notional || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">—</td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-400">—</td>
+                      <td className="px-6 py-4 text-right font-mono font-bold text-white">
+                        ${sortedList.reduce((s: number, p: any) => s + Number(p.margin || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className={`px-6 py-4 text-right font-mono font-bold ${sortedList.reduce((s, p) => s + Number(p.unrealizedPnl || 0), 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {(() => {
+                          const totalPnl = sortedList.reduce((s, p) => s + Number(p.unrealizedPnl || 0), 0);
+                          return (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        })()}
+                      </td>
+                      <td className={`px-6 py-4 text-right font-mono font-bold ${sortedList.reduce((s, p) => s + Number(p.unrealizedPnl || 0), 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {(() => {
+                          const totalNotional = sortedList.reduce((s: number, p: any) => s + Number(p.notional || 0), 0);
+                          const totalPnl = sortedList.reduce((s, p) => s + Number(p.unrealizedPnl || 0), 0);
+                          const pct = totalNotional > 0 ? (totalPnl / totalNotional) * 100 : 0;
+                          return (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                        })()}
+                      </td>
+                    </tr>
+                  </>
+                );
+              })()}
             </tbody>
           </table>
         </div>
@@ -746,9 +890,10 @@ export default function DashboardOverview() {
                 </tr>
               ) : (
                 cexBalances.map((ex, idx) => {
-                  const spotTotal = Number(ex.spotTotalEquity || ((ex.spotUsdt || 0) + (ex.spotUsdc || 0)));
-                  const futTotal = Number(ex.futuresTotalEquity || ((ex.futuresUsdt || 0) + (ex.futuresUsdc || 0)));
-                  const total = spotTotal + futTotal;
+                  const isHl = String(ex.exchangeId || '').toLowerCase() === 'hyperliquid';
+                  const spotTotal = Number(ex.spotTotalEquity ?? ((ex.spotUsdt || 0) + (ex.spotUsdc || 0)));
+                  const futTotal = Number(ex.futuresTotalEquity ?? ((ex.futuresUsdt || 0) + (ex.futuresUsdc || 0)));
+                  const total = isHl && spotTotal > 0 && futTotal > 0 ? spotTotal : (spotTotal + futTotal);
 
                   return (
                     <tr key={ex.id || idx} className="hover:bg-slate-800/30 transition-colors">

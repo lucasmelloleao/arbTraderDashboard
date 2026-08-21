@@ -26,7 +26,12 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get('refresh') === 'true';
 
-    const hasAnyBalance = keys.some((k: any) => (k.spotUsdt || 0) + (k.spotUsdc || 0) + (k.futuresUsdt || 0) + (k.futuresUsdc || 0) > 0 || k.balancesUpdatedAt);
+    const hasAnyBalance = keys.some((k: any) => {
+      if (String(k.exchangeId || '').toLowerCase() === 'hyperliquid' && (k.spotTotalEquity || 0) === 0 && (k.futuresTotalEquity || 0) === 0) {
+        return false;
+      }
+      return (k.spotUsdt || 0) + (k.spotUsdc || 0) + (k.futuresUsdt || 0) + (k.futuresUsdc || 0) > 0 || k.balancesUpdatedAt;
+    });
 
     // ⚡ Retorno Instantâneo: Retorna o saldo em cache se houver dados gravados no banco (e forceRefresh não for exigido)
     if (hasAnyBalance && !forceRefresh) {
@@ -82,6 +87,48 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     const exchangePromises = keys.map(async (key) => {
       const exId = String(key.exchangeId || '').toLowerCase().trim();
       const ccxtId = exId === 'gateio' ? 'gate' : exId;
+
+      if (exId === 'hyperliquid') {
+        try {
+          const res = await fetch('https://api.hyperliquid.xyz/info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'clearinghouseState', user: key.apiKey }),
+            cache: 'no-store',
+          });
+          const data = await res.json();
+          const ms = data?.marginSummary || {};
+          const equity = Number(ms.accountValue || 0);
+          const withdrawable = Number(data?.withdrawable || 0);
+          
+          await ExchangeKey.findByIdAndUpdate(key._id, {
+            $set: { 
+              spotUsdt: 0, 
+              spotUsdc: withdrawable, 
+              spotTotalEquity: equity, 
+              futuresUsdt: 0, 
+              futuresUsdc: withdrawable, 
+              futuresTotalEquity: equity, 
+              balancesUpdatedAt: new Date() 
+            }
+          }).catch(() => {});
+
+          return {
+            id: key._id,
+            name: key.name,
+            exchangeId: key.exchangeId,
+            spotUsdt: 0,
+            spotUsdc: withdrawable,
+            spotTotalEquity: equity,
+            futuresUsdt: 0,
+            futuresUsdc: withdrawable,
+            futuresTotalEquity: equity,
+          };
+        } catch (hlErr: any) {
+          console.warn(`⚠️ Erro ao buscar saldo Hyperliquid [${key.name}]:`, hlErr?.message);
+          return { id: key._id, name: key.name, exchangeId: key.exchangeId, spotUsdt: 0, spotUsdc: 0, spotTotalEquity: 0, futuresUsdt: 0, futuresUsdc: 0, futuresTotalEquity: 0 };
+        }
+      }
 
       if (!(ccxt as any)[ccxtId]) {
         return { id: key._id, name: key.name, spotUsdt: 0, spotUsdc: 0, futuresUsdt: 0, futuresUsdc: 0, futuresTotalEquity: 0 };

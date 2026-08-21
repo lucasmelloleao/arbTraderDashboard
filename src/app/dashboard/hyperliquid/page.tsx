@@ -351,14 +351,20 @@ export default function HyperliquidPage() {
           {/* Botão de Colheita Automática */}
           <button
             onClick={toggleHarvest}
-            disabled={!hasKey}
-            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold transition-all shadow-lg hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed ${
-              settings?.isScanningEnabled
-                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 border border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
-                : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+            disabled={!hasKey || loading}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed ${
+              loading
+                ? 'bg-slate-800 text-slate-500 border border-slate-700'
+                : settings?.isScanningEnabled
+                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 border border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)] hover:scale-105'
+                : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-105'
             }`}
           >
-            {settings?.isScanningEnabled ? (
+            {loading ? (
+              <>
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Carregando...
+              </>
+            ) : settings?.isScanningEnabled ? (
               <>
                 <span className="h-2 w-2 rounded-full bg-slate-950 animate-ping" />
                 🛑 Parar Colheita (Ativa)
@@ -367,8 +373,8 @@ export default function HyperliquidPage() {
               <>🌾 Iniciar Colheita</>
             )}
           </button>
-          <button onClick={fetchAll} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors">
-            <RefreshCw className="w-4 h-4" /> Atualizar
+          <button onClick={fetchAll} disabled={loading} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
         </div>
       </div>

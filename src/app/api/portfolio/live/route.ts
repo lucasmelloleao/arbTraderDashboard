@@ -14,27 +14,38 @@ export const dynamic = 'force-dynamic';
  * Retorna { exchange, exchangeId, spotCoins, positions } no formato do /live.
  */
 async function fetchHyperliquidPortfolio(key: any, userId: string) {
-  const { InfoClient, HttpTransport } = await import('@nktkas/hyperliquid');
-  const info = new InfoClient({ transport: new HttpTransport() });
-  const user = String(key.apiKey || ''); // MASTER address
-
-  const spotCoins: any[] = [];
-  const positions: any[] = [];
-
-  // 1. Spot L1: saldos de tokens
-  const spotState = await info.spotClearinghouseState({ user }).catch(() => null);
-  const spotBalances = spotState?.balances || [];
-  // Preços spot (markPx de todos os pares) para valorar os tokens
-  let spotPrices: Record<string, number> = {};
   try {
-    const [smeta, sctxs] = await info.spotMetaAndAssetCtxs();
-    const tokenNames = new Map<string, string>((smeta.tokens || []).map((t: any) => [String(t.index), String(t.name)]));
-    for (let i = 0; i < (smeta.universe || []).length; i++) {
-      const base = tokenNames.get(String(smeta.universe[i].tokens[0]));
-      const ctx = sctxs[i];
-      if (base && ctx?.markPx) spotPrices[base] = Number(ctx.markPx);
-    }
-  } catch { /* sem preços spot */ }
+    const { InfoClient, HttpTransport } = await import('@nktkas/hyperliquid');
+    const info = new InfoClient({ transport: new HttpTransport() });
+    const user = String(key.apiKey || ''); // MASTER address
+
+    const spotCoins: any[] = [];
+    const positions: any[] = [];
+
+    // 1. Spot L1: saldos de tokens
+    const spotState = await Promise.race([
+      info.spotClearinghouseState({ user }),
+      new Promise<null>((r) => setTimeout(() => r(null), 6000))
+    ]).catch(() => null);
+
+    const spotBalances = spotState?.balances || [];
+    // Preços spot (markPx de todos os pares) para valorar os tokens
+    let spotPrices: Record<string, number> = {};
+    try {
+      const spotMetaRes = await Promise.race([
+        info.spotMetaAndAssetCtxs(),
+        new Promise<null>((r) => setTimeout(() => r(null), 6000))
+      ]);
+      if (spotMetaRes) {
+        const [smeta, sctxs] = spotMetaRes;
+        const tokenNames = new Map<string, string>((smeta.tokens || []).map((t: any) => [String(t.index), String(t.name)]));
+        for (let i = 0; i < (smeta.universe || []).length; i++) {
+          const base = tokenNames.get(String(smeta.universe[i].tokens[0]));
+          const ctx = sctxs[i];
+          if (base && ctx?.markPx) spotPrices[base] = Number(ctx.markPx);
+        }
+      }
+    } catch { /* sem preços spot */ }
 
   for (const b of spotBalances) {
     const total = Number(b.total || 0);
@@ -57,16 +68,55 @@ async function fetchHyperliquidPortfolio(key: any, userId: string) {
     });
   }
 
+  // 1.5. Garante que o accountValue (equity total do perp) em USDC da Hyperliquid esteja presente
+  const perpStateForBalance = await Promise.race([
+    info.clearinghouseState({ user }),
+    new Promise<null>((r) => setTimeout(() => r(null), 6000))
+  ]).catch(() => null);
+
+  const accountValue = Number(perpStateForBalance?.marginSummary?.accountValue || 0);
+  const usdcCoin = spotCoins.find(c => c.asset === 'USDC');
+  if (usdcCoin) {
+    usdcCoin.total += accountValue;
+    usdcCoin.usdValue += Number(accountValue.toFixed(4));
+    usdcCoin.free += Number(perpStateForBalance?.withdrawable || accountValue);
+  } else if (accountValue > 0) {
+    spotCoins.push({
+      asset: 'USDC',
+      total: accountValue,
+      free: Number(perpStateForBalance?.withdrawable || accountValue),
+      used: accountValue - Number(perpStateForBalance?.withdrawable || accountValue),
+      usdValue: Number(accountValue.toFixed(4)),
+      totalCost: 0,
+      totalQty: 0,
+      investedValue: 0,
+      pnl: 0,
+      pnlPct: null,
+      avgCostPrice: null,
+      exchange: 'Hyperliquid',
+    });
+  }
+
   // 2. Perp: posições abertas
-  const perpState = await info.clearinghouseState({ user }).catch(() => null);
+  const perpState = perpStateForBalance || await Promise.race([
+    info.clearinghouseState({ user }),
+    new Promise<null>((r) => setTimeout(() => r(null), 6000))
+  ]).catch(() => null);
+
   // Preços mark dos perps (para valorar as posições)
   let perpMarks: Record<string, number> = {};
   try {
-    const [meta, ctxs] = await info.metaAndAssetCtxs();
-    for (let i = 0; i < (meta.universe || []).length; i++) {
-      const name = meta.universe[i]?.name;
-      const ctx = ctxs?.[i];
-      if (name && ctx?.markPx) perpMarks[name] = Number(ctx.markPx);
+    const metaRes = await Promise.race([
+      info.metaAndAssetCtxs(),
+      new Promise<null>((r) => setTimeout(() => r(null), 6000))
+    ]);
+    if (metaRes) {
+      const [meta, ctxs] = metaRes;
+      for (let i = 0; i < (meta.universe || []).length; i++) {
+        const name = meta.universe[i]?.name;
+        const ctx = ctxs?.[i];
+        if (name && ctx?.markPx) perpMarks[name] = Number(ctx.markPx);
+      }
     }
   } catch { /* sem marks */ }
 
@@ -99,6 +149,10 @@ async function fetchHyperliquidPortfolio(key: any, userId: string) {
   }
 
   return { exchange: 'Hyperliquid', exchangeId: 'hyperliquid', spotCoins, positions };
+  } catch (err: any) {
+    console.warn('⚠️ Erro interno fetchHyperliquidPortfolio:', err?.message);
+    return { exchange: 'Hyperliquid', exchangeId: 'hyperliquid', spotCoins: [], positions: [] };
+  }
 }
 
 /**
@@ -182,6 +236,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     const results = await Promise.allSettled(keys.map(async (key: any) => {
       const exId = String(key.exchangeId || '').toLowerCase().trim();
       const ccxtId = exId === 'gateio' ? 'gate' : exId;
+      if (exId === 'hyperliquid') return null;
       if (!(ccxt as any)[ccxtId]) return null;
 
       let apiSecret = key.apiSecret;
@@ -214,6 +269,25 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       try {
         const bal = await spotEx.fetchBalance();
         const totals = bal.total || {};
+        const nonStableCodes = Object.keys(totals).filter(code => {
+          const amt = Number(totals[code] || 0);
+          return amt > 0 && code !== 'USDT' && code !== 'USDC';
+        });
+
+        let spotPrices: Record<string, number> = {};
+        if (nonStableCodes.length > 0) {
+          try {
+            const tickersToFetch = nonStableCodes.map(c => `${c}/USDT`);
+            const tickers = await spotEx.fetchTickers(tickersToFetch).catch(() => ({}));
+            for (const code of nonStableCodes) {
+              const symbol = `${code}/USDT`;
+              if (tickers[symbol]?.last || tickers[symbol]?.close) {
+                spotPrices[code] = Number(tickers[symbol].last || tickers[symbol].close);
+              }
+            }
+          } catch { /* fallback por item se batch falhar */ }
+        }
+
         for (const code of Object.keys(totals)) {
           const amt = Number(totals[code] || 0);
           if (amt <= 0) continue;
@@ -223,10 +297,7 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
           if (code === 'USDT' || code === 'USDC') {
             usdValue = amt;
           } else {
-            try {
-              const t = await spotEx.fetchTicker(`${code}/USDT`);
-              price = Number(t?.last || t?.close || 0);
-            } catch { price = 0; }
+            price = spotPrices[code] || 0;
             if (price <= 0) {
               const coinUsd = Number(bal[code]?.usdValue || 0);
               if (coinUsd > 0) usdValue = coinUsd;
@@ -275,7 +346,11 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
       const positions: any[] = [];
       try {
         if (futEx.has?.fetchPositions) {
-          const openPositions = await futEx.fetchPositions();
+          const openPositions = await Promise.race([
+            futEx.fetchPositions(),
+            new Promise<any[]>((r) => setTimeout(() => r([]), 4000))
+          ]).catch(() => []);
+
           if (Array.isArray(openPositions)) {
             for (const p of openPositions) {
               const contracts = Math.abs(Number(p.contracts ?? p.contractsSigned ?? 0));
@@ -297,28 +372,14 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
               // Ex.: BTW = 18 contratos × 100 (contractSize) = 1800 BTW.
               const qty = contracts * contractSize;
 
-              // Mark price OFICIAL da corretora. No MEXC o 'markPrice' do fetchPositions
-              // vem nulo, e o 'fetchTicker' retorna o preço de última negociação
-              // (ex.: 0.21909), que não é o preço de marca usado no cálculo de P&L
-              // (ex.: 0.21313). Para refletir o real da corretora, deriva-se o mark a
-              // partir do P&L não realizado informado pela própria exchange:
-              //   short: P&L = (entry − mark) × qty  →  mark = entry − P&L/qty
-              //   long : P&L = (mark − entry) × qty  →  mark = entry + P&L/qty
               let markPrice: number | null = null;
               if (qty > 0 && entryPrice !== null && entryPrice > 0 && unrealizedPnl !== 0) {
                 const delta = unrealizedPnl / qty;
                 markPrice = side === 'short' ? entryPrice - delta : entryPrice + delta;
                 markPrice = Number(markPrice.toFixed(8));
               }
-              // Fallback (sem P&L ainda): mark da própria pipe; senão o ticker.
               if (!markPrice) {
-                markPrice = Number(p.markPrice ?? p.markprice ?? 0) || null;
-                if (!markPrice) {
-                  try {
-                    const t = await futEx.fetchTicker(symbol);
-                    markPrice = Number(t?.last || t?.close || 0) || null;
-                  } catch { markPrice = null; }
-                }
+                markPrice = Number(p.markPrice ?? p.markprice ?? 0) || entryPrice;
               }
 
               const notional = markPrice
@@ -370,8 +431,10 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     // Consolida moedas spot (soma por moeda entre exchanges)
     const coinMap = new Map<string, any>();
     let futuresUnrealizedPnl = 0;
+    const allSpotCoins: any[] = [];
     for (const ex of valid) {
       for (const c of ex.spotCoins) {
+        allSpotCoins.push({ ...c, exchange: c.exchange || ex.exchange });
         const key2 = c.asset;
         if (coinMap.has(key2)) {
           const prev = coinMap.get(key2);
@@ -408,9 +471,24 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
     const allPositions = valid.flatMap(e => e.positions);
     const spotTotalUsd = spotCoins.reduce((s, c) => s + Number(c.usdValue || 0), 0);
 
+    // Grava snapshot com os saldos atualizados de todas as exchanges (incluindo Hyperliquid) no MongoDB
+    try {
+      const PortfolioSnapshot = (await import('@/models/PortfolioSnapshot')).default;
+      const totalUsdValue = Number((spotTotalUsd + futuresUnrealizedPnl).toFixed(2));
+      await PortfolioSnapshot.create({
+        userId,
+        timestamp: new Date(),
+        totalUsdValue,
+        balances: allSpotCoins,
+        positions: allPositions,
+        futuresUnrealizedPnl: Number(futuresUnrealizedPnl.toFixed(4)),
+      }).catch(() => {});
+    } catch { /* ignora erro de gravacao */ }
+
     return NextResponse.json({
       success: true,
       spotCoins,
+      rawSpotCoins: allSpotCoins,
       positions: allPositions,
       spotTotalUsd: Number(spotTotalUsd.toFixed(2)),
       futuresUnrealizedPnl: Number(futuresUnrealizedPnl.toFixed(4)),
