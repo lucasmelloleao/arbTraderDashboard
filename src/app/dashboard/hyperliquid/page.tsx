@@ -91,6 +91,31 @@ const TYPE_STYLES: Record<string, string> = {
   error: 'bg-red-500/20 text-red-400',
 };
 
+function formatDuration(ms: number): string {
+  if (ms <= 0) return '< 1s';
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  return `${seconds}s`;
+}
+
+function fmtPrice(val?: number): string {
+  if (val === undefined || val === null || val === 0) return '—';
+  if (val < 0.1) return val.toFixed(6);
+  return val.toFixed(4);
+}
+
+function fmtSigned(val?: number | null, digits = 4): string {
+  if (val === undefined || val === null) return '—';
+  const abs = Math.abs(val);
+  const d = abs >= 1 ? 2 : digits;
+  return `${val >= 0 ? '+' : '−'}$${abs.toFixed(d)}`;
+}
+
 export default function HyperliquidPage() {
   const [strategies, setStrategies] = useState<HLStrategy[]>([]);
   const [trades, setTrades] = useState<HLTrade[]>([]);
@@ -112,6 +137,9 @@ export default function HyperliquidPage() {
   const [tradeFilter, setTradeFilter] = useState<TradeFilterKey>('all');
   const [tradeSearch, setTradeSearch] = useState('');
   const [visibleTrades, setVisibleTrades] = useState(20);
+
+  // Abas de operações (Em Aberto / Encerradas)
+  const [opTab, setOpTab] = useState<'open' | 'closed'>('open');
 
   const fetchAll = async () => {
     setLoading(true);
@@ -244,6 +272,40 @@ export default function HyperliquidPage() {
   const openPositions = strategies.filter((s) => s.positionOpen);
   const executedCloses = trades.filter((t) => t.type === 'close' && t.status === 'executed');
 
+  // ── Operações casadas (entrada ↔ saída), similar ao funding arbitrage ──
+  // Um par = trade de abertura (open) + trade de fechamento (close) da mesma
+  // estratégia/símbolo, com o close depois do open.
+  const openTrades = trades.filter((t) => t.type === 'open' && (t.status === 'executed' || t.status === 'simulated'));
+  const closeTrades = trades.filter((t) => t.type === 'close' && (t.status === 'executed' || t.status === 'simulated'));
+
+  const marriedOperations = useMemo(() => {
+    const ops: { open: HLTrade; close: HLTrade }[] = [];
+    const usedCloseIds = new Set<string>();
+    for (const open of openTrades) {
+      const openTime = new Date(open.createdAt).getTime();
+      const match = closeTrades
+        .filter((c) => !usedCloseIds.has(c._id))
+        .filter((c) => {
+          const sameStrat = open.strategyName && c.strategyName && open.strategyName === c.strategyName;
+          const sameSymbol = open.perpSymbol && c.perpSymbol && open.perpSymbol === c.perpSymbol;
+          return (sameStrat || sameSymbol) && new Date(c.createdAt).getTime() >= openTime;
+        })
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
+      if (match) {
+        usedCloseIds.add(match._id);
+        ops.push({ open, close: match });
+      }
+    }
+    // Fechamentos sem abertura pareada correspondente (ex.: reconciliação)
+    const orphanCloses = closeTrades.filter((c) => !usedCloseIds.has(c._id));
+    return { ops, orphanCloses };
+  }, [openTrades, closeTrades]);
+
+  const closedPnl = marriedOperations.ops.reduce((acc, op) => acc + (op.close.realizedPnl ?? 0), 0);
+  const openOps = openTrades.filter((t) =>
+    !marriedOperations.ops.some((op) => op.open._id === t._id)
+  );
+
   const filteredTrades = useMemo(() => {
     const q = tradeSearch.trim().toLowerCase();
     return trades.filter((t) => {
@@ -322,6 +384,26 @@ export default function HyperliquidPage() {
           Nenhuma chave Hyperliquid cadastrada. Adicione em <b>Integrações de Trading</b> (opção Hyperliquid DEX) com o endereço MASTER + private key do AGENT.
         </div>
       )}
+
+      {/* Account + Stats (primeiro, antes das configurações) */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center gap-2 text-slate-400 text-sm mb-2"><WalletIcon className="w-4 h-4 text-fuchsia-500" /> Equity</div>
+          <div className="text-2xl font-bold text-white">${(account?.equity ?? 0).toFixed(2)}</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="text-slate-400 text-sm mb-2">Disponível (withdrawable)</div>
+          <div className="text-2xl font-bold text-emerald-400">${(account?.withdrawable ?? 0).toFixed(2)}</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="text-slate-400 text-sm mb-2">Posições abertas</div>
+          <div className="text-2xl font-bold text-white">{openPositions.length}</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="text-slate-400 text-sm mb-2">PnL realizado</div>
+          <div className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>${totalPnl.toFixed(2)}</div>
+        </div>
+      </div>
 
       {/* Quadro de Configurações Globais */}
       <div className="rounded-xl border border-indigo-500/20 bg-slate-900/80 p-4 shadow-xl">
@@ -405,24 +487,185 @@ export default function HyperliquidPage() {
         </div>
       </div>
 
-      {/* Account + Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <div className="flex items-center gap-2 text-slate-400 text-sm mb-2"><WalletIcon className="w-4 h-4 text-fuchsia-500" /> Equity</div>
-          <div className="text-2xl font-bold text-white">${(account?.equity ?? 0).toFixed(2)}</div>
+      {/* Operações Casadas (Em Aberto / Encerradas) — similar ao funding arbitrage */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="mb-4 flex flex-col gap-1">
+          <h2 className="font-bold text-white">Operações Realizadas e em Aberto</h2>
+          <p className="text-xs text-slate-500">Entrada (PERP+SPOT) pareada com a saída correspondente e o lucro/prejuízo realizado.</p>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <div className="text-slate-400 text-sm mb-2">Disponível (withdrawable)</div>
-          <div className="text-2xl font-bold text-emerald-400">${(account?.withdrawable ?? 0).toFixed(2)}</div>
+
+        {/* Abas */}
+        <div className="mb-4 flex gap-2 border-b border-slate-800 pb-3">
+          <button
+            onClick={() => setOpTab('open')}
+            className={`rounded-lg px-4 py-2 text-xs font-bold transition-colors ${opTab === 'open' ? 'bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]' : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+          >
+            Em Aberto ({openOps.length})
+          </button>
+          <button
+            onClick={() => setOpTab('closed')}
+            className={`rounded-lg px-4 py-2 text-xs font-bold transition-colors ${opTab === 'closed' ? 'bg-indigo-600 text-white shadow-[0_0_10px_rgba(79,70,229,0.4)]' : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+          >
+            Encerradas ({marriedOperations.ops.length})
+          </button>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <div className="text-slate-400 text-sm mb-2">Posições abertas</div>
-          <div className="text-2xl font-bold text-white">{openPositions.length}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-          <div className="text-slate-400 text-sm mb-2">PnL realizado</div>
-          <div className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>${totalPnl.toFixed(2)}</div>
-        </div>
+
+        {/* Tab: Em Aberto */}
+        {opTab === 'open' && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {openOps.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">
+                Nenhuma operação em aberto no momento. O robô abrirá automaticamente quando houver funding favorável.
+              </div>
+            ) : (
+              openOps.map((t) => {
+                const s = strategies.find((st) => st.name === t.strategyName || st.perpSymbol === t.perpSymbol);
+                return (
+                  <div key={t._id} className="rounded-xl border border-emerald-500/30 bg-slate-900 p-5 flex flex-col justify-between shadow-lg">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                        <div>
+                          <h3 className="text-base font-extrabold text-white">{t.strategyName || t.perpSymbol || 'Operação'}</h3>
+                          <div className="text-xs text-slate-500 font-mono">{t.perpSymbol || '—'}</div>
+                        </div>
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 text-xs font-bold text-emerald-300">
+                          ● ABERTA
+                        </span>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3.5">
+                          <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">💵 Valor de Entrada</span>
+                          <div className="mt-1 text-xl sm:text-2xl font-black text-white">${Number(t.amount || 0).toFixed(2)} <span className="text-xs font-normal text-slate-400">USDC</span></div>
+                          <span className="text-[11px] text-slate-400 font-mono mt-1 block">preço {fmtPrice(t.perpPrice)}</span>
+                        </div>
+                        <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3.5">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">⏳ Em aberto desde</span>
+                          <div className="mt-1 text-sm font-bold text-white">{new Date(t.createdAt).toLocaleString('pt-BR')}</div>
+                          <span className="text-[11px] text-slate-400 mt-1 block">funding {t.fundingRate !== undefined && t.fundingRate !== null ? `${(t.fundingRate * 100).toFixed(4)}%` : '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {s?.positionOpen && (
+                      <button onClick={() => closeStrategy(s._id)} className="mt-4 bg-red-500/20 hover:bg-red-500/30 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 justify-center">
+                        <XCircle className="w-3.5 h-3.5" /> Encerrar
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* Tab: Encerradas */}
+        {opTab === 'closed' && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {marriedOperations.ops.length === 0 && marriedOperations.orphanCloses.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">
+                Nenhuma operação encerrada no histórico ainda.
+              </div>
+            ) : (
+              <>
+                {marriedOperations.ops.map((op) => {
+                  const pnl = op.close.realizedPnl ?? 0;
+                  const isProfit = pnl >= 0;
+                  const amount = Number(op.open.amount || op.close.amount || 0);
+                  const pnlPct = amount > 0 ? (pnl / amount) * 100 : 0;
+                  const durationMs = new Date(op.close.createdAt).getTime() - new Date(op.open.createdAt).getTime();
+                  return (
+                    <div key={op.close._id} className={`rounded-xl border p-5 flex flex-col justify-between shadow-lg ${isProfit ? 'border-emerald-500/40 bg-emerald-950/20' : 'border-red-500/40 bg-red-950/20'}`}>
+                      <div>
+                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                          <div>
+                            <h3 className="text-base font-extrabold text-white">{op.close.strategyName || op.open.strategyName || op.close.perpSymbol || 'Operação'}</h3>
+                            <div className="text-xs text-slate-500 font-mono">{op.close.perpSymbol || op.open.perpSymbol || '—'}</div>
+                          </div>
+                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/20 border border-indigo-500/30 px-2.5 py-1 text-xs font-bold text-indigo-300">⏱️ {formatDuration(durationMs)}</span>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                          <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3.5">
+                            <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">💵 Valor de Entrada</span>
+                            <div className="mt-1 text-xl sm:text-2xl font-black text-white">${amount.toFixed(2)} <span className="text-xs font-normal text-slate-400">USDC</span></div>
+                            <span className="text-[11px] text-slate-400 font-mono mt-1 block">preço {fmtPrice(op.open.perpPrice)}</span>
+                          </div>
+                          <div className={`rounded-xl border p-3.5 flex flex-col justify-between ${isProfit ? 'border-emerald-500/40 bg-emerald-950/25' : 'border-red-500/40 bg-red-950/25'}`}>
+                            <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">🏁 Valor Final</span>
+                            <div className="mt-1 text-xl sm:text-2xl font-black text-white">${(amount + pnl).toFixed(2)} <span className="text-xs font-normal text-slate-400">USDC</span></div>
+                            <div className={`text-xs font-extrabold mt-1 ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {fmtSigned(pnl)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 space-y-2 rounded-lg bg-slate-950/90 border border-white/10 p-3 text-xs">
+                          <div className="font-semibold text-slate-300 border-b border-white/5 pb-1 flex justify-between">
+                            <span>Preços (Entrada → Saída)</span>
+                            <span className="text-[10px] text-gray-400 font-normal">Hedge 1X</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-gray-300">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">PERP</span>
+                              <span className="text-slate-400 font-mono text-[11px]">{fmtPrice(op.open.perpPrice)} → {fmtPrice(op.close.perpPrice)}</span>
+                            </span>
+                            <span className={`font-mono font-bold ${(op.close.realizedPnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtSigned(op.close.realizedPnl)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-gray-300">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">SPOT</span>
+                              <span className="text-slate-400 font-mono text-[11px]">{fmtPrice(op.open.spotPrice)} → {fmtPrice(op.close.spotPrice)}</span>
+                            </span>
+                            <span className="font-mono font-bold text-slate-500">—</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 space-y-1.5 text-xs text-gray-400 border-t border-white/5 pt-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">🚀 Abertura:</span>
+                            <span className="font-mono font-medium text-slate-200">{new Date(op.open.createdAt).toLocaleString('pt-BR')}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">🏁 Encerramento:</span>
+                            <span className="font-mono font-medium text-slate-200">{new Date(op.close.createdAt).toLocaleString('pt-BR')}</span>
+                          </div>
+                          {op.close.reason && (
+                            <div className="flex items-center justify-between border-t border-white/5 pt-1 text-[11px]">
+                              <span className="text-amber-300 font-semibold">📌 Motivo:</span>
+                              <span className="font-mono font-bold text-amber-200 text-right">{op.close.reason}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {marriedOperations.orphanCloses.map((c) => (
+                  <div key={c._id} className="rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-lg">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                      <div>
+                        <h3 className="text-base font-extrabold text-white">{c.strategyName || c.perpSymbol || 'Operação'}</h3>
+                        <div className="text-xs text-slate-500 font-mono">{c.perpSymbol || '—'}</div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-slate-700 px-2.5 py-1 text-xs font-bold text-slate-300">🏁 FECHADA</span>
+                    </div>
+                    <div className="mt-3 space-y-1.5 text-xs text-gray-400">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">🏁 Encerramento:</span>
+                        <span className="font-mono font-medium text-slate-200">{new Date(c.createdAt).toLocaleString('pt-BR')}</span>
+                      </div>
+                      {c.reason && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-amber-300 font-semibold">📌 Motivo:</span>
+                          <span className="font-mono font-bold text-amber-200 text-right">{c.reason}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Estratégias */}
