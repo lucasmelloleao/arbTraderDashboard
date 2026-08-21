@@ -129,6 +129,7 @@ export default function HyperliquidPage() {
   // Logs
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
   const [logLines, setLogLines] = useState(150);
   const [lastUpdateLogs, setLastUpdateLogs] = useState<string | null>(null);
   const terminalContainerRef = React.useRef<HTMLDivElement | null>(null);
@@ -258,15 +259,20 @@ export default function HyperliquidPage() {
     fetchAll();
     fetchLogs();
     const i1 = setInterval(fetchAll, 15000);
-    const i2 = setInterval(fetchLogs, 8000);
-    return () => { clearInterval(i1); clearInterval(i2); };
+    return () => clearInterval(i1);
   }, []);
 
   useEffect(() => {
-    if (terminalContainerRef.current) {
+    if (!autoRefreshLogs) return;
+    const i2 = setInterval(fetchLogs, 8000);
+    return () => clearInterval(i2);
+  }, [autoRefreshLogs, logLines]);
+
+  useEffect(() => {
+    if (terminalContainerRef.current && autoRefreshLogs) {
       terminalContainerRef.current.scrollTop = terminalContainerRef.current.scrollHeight;
     }
-  }, [terminalLogs]);
+  }, [terminalLogs, autoRefreshLogs]);
 
   const totalPnl = trades.reduce((acc, t) => acc + (t.realizedPnl ?? 0), 0);
   const openPositions = strategies.filter((s) => s.positionOpen);
@@ -821,12 +827,22 @@ export default function HyperliquidPage() {
           <h2 className="font-bold text-white flex items-center gap-2"><Terminal className="w-4 h-4 text-fuchsia-500" /> Logs do robô</h2>
           <div className="flex items-center gap-2">
             {lastUpdateLogs && <span className="text-xs text-slate-500">atualizado {lastUpdateLogs}</span>}
+            <button
+              onClick={() => setAutoRefreshLogs(!autoRefreshLogs)}
+              className={`px-2.5 py-1 text-xs font-semibold rounded border transition-colors ${
+                autoRefreshLogs
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  : 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+              }`}
+            >
+              {autoRefreshLogs ? '⏸ Pausar' : '▶ Retomar'}
+            </button>
             <select value={logLines} onChange={(e) => setLogLines(Number(e.target.value))} className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white">
               <option value={100}>100</option>
               <option value={200}>200</option>
               <option value={400}>400</option>
             </select>
-            <button onClick={fetchLogs} className="bg-slate-800 hover:bg-slate-700 text-white px-2 py-1 rounded text-xs"><RefreshCw className="w-3.5 h-3.5" /></button>
+            <button onClick={fetchLogs} className="bg-slate-800 hover:bg-slate-700 text-white px-2 py-1 rounded text-xs"><RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin' : ''}`} /></button>
           </div>
         </div>
         <div ref={terminalContainerRef} className="p-4 h-72 overflow-y-auto font-mono text-xs text-slate-300 bg-slate-950/50">
