@@ -9,6 +9,99 @@ import { withAuth } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 /**
+ * Busca o portfolio da Hyperliquid (spot L1 + perp) via API oficial
+ * (@nktkas/hyperliquid), pois o ccxt exige parâmetro `user` que não temos.
+ * Retorna { exchange, exchangeId, spotCoins, positions } no formato do /live.
+ */
+async function fetchHyperliquidPortfolio(key: any, userId: string) {
+  const { InfoClient, HttpTransport } = await import('@nktkas/hyperliquid');
+  const info = new InfoClient({ transport: new HttpTransport() });
+  const user = String(key.apiKey || ''); // MASTER address
+
+  const spotCoins: any[] = [];
+  const positions: any[] = [];
+
+  // 1. Spot L1: saldos de tokens
+  const spotState = await info.spotClearinghouseState({ user }).catch(() => null);
+  const spotBalances = spotState?.balances || [];
+  // Preços spot (markPx de todos os pares) para valorar os tokens
+  let spotPrices: Record<string, number> = {};
+  try {
+    const [smeta, sctxs] = await info.spotMetaAndAssetCtxs();
+    const tokenNames = new Map<string, string>((smeta.tokens || []).map((t: any) => [String(t.index), String(t.name)]));
+    for (let i = 0; i < (smeta.universe || []).length; i++) {
+      const base = tokenNames.get(String(smeta.universe[i].tokens[0]));
+      const ctx = sctxs[i];
+      if (base && ctx?.markPx) spotPrices[base] = Number(ctx.markPx);
+    }
+  } catch { /* sem preços spot */ }
+
+  for (const b of spotBalances) {
+    const total = Number(b.total || 0);
+    if (total <= 0) continue;
+    const asset = String(b.coin || '');
+    const usdValue = asset === 'USDC' ? total : (total * (spotPrices[asset] || 0));
+    spotCoins.push({
+      asset,
+      total,
+      free: Number(b.total || 0) - Number(b.hold || 0),
+      used: Number(b.hold || 0),
+      usdValue: Number(usdValue.toFixed(4)),
+      totalCost: 0,
+      totalQty: 0,
+      investedValue: 0,
+      pnl: 0,
+      pnlPct: null,
+      avgCostPrice: null,
+      exchange: 'Hyperliquid',
+    });
+  }
+
+  // 2. Perp: posições abertas
+  const perpState = await info.clearinghouseState({ user }).catch(() => null);
+  // Preços mark dos perps (para valorar as posições)
+  let perpMarks: Record<string, number> = {};
+  try {
+    const [meta, ctxs] = await info.metaAndAssetCtxs();
+    for (let i = 0; i < (meta.universe || []).length; i++) {
+      const name = meta.universe[i]?.name;
+      const ctx = ctxs?.[i];
+      if (name && ctx?.markPx) perpMarks[name] = Number(ctx.markPx);
+    }
+  } catch { /* sem marks */ }
+
+  for (const ap of (perpState?.assetPositions || [])) {
+    const pos = ap.position || {};
+    const szi = Number(pos.szi || 0);
+    if (szi === 0) continue;
+    const entryPrice = Number(pos.entryPx || 0);
+    const coin = String(pos.coin || '');
+    const markPrice = perpMarks[coin] || 0;
+    const unrealizedPnl = Number(pos.unrealizedPnl || 0);
+    const qty = Math.abs(szi);
+    const notional = qty * (markPrice || entryPrice);
+    positions.push({
+      exchange: 'Hyperliquid',
+      symbol: coin,
+      side: szi > 0 ? 'long' : 'short',
+      contracts: qty,
+      contractSize: 1,
+      qty: Number(qty.toFixed(6)),
+      notional: Number(notional.toFixed(4)),
+      entryPrice,
+      markPrice,
+      liquidationPrice: Number(pos.liquidationPx || 0) || null,
+      leverage: 1,
+      unrealizedPnl: Number(unrealizedPnl.toFixed(4)),
+      unrealizedPnlPct: notional > 0 ? Number(((unrealizedPnl / notional) * 100).toFixed(4)) : 0,
+      margin: Number(notional.toFixed(4)),
+    });
+  }
+
+  return { exchange: 'Hyperliquid', exchangeId: 'hyperliquid', spotCoins, positions };
+}
+
+/**
  * GET /api/portfolio/live
  * Busca AO VIVO da exchange:
  *  - saldo spot por moeda (quantidade + valor USD via fetchTicker)
@@ -257,6 +350,18 @@ export const GET = withAuth(async (req: NextRequest, userId: string) => {
 
       return { exchange: key.name, exchangeId: exId, spotCoins, positions };
     }));
+
+    // ── Hyperliquid (DEX): busca saldo spot L1 + posições perp via API própria
+    // (o ccxt não suporta HL sem parâmetro user). Compõe o saldo do usuário.
+    const hlKey = keys.find((k: any) => String(k.exchangeId || '').toLowerCase() === 'hyperliquid');
+    if (hlKey) {
+      try {
+        const hlResult = await fetchHyperliquidPortfolio(hlKey, userId);
+        if (hlResult) results.push({ status: 'fulfilled', value: hlResult } as any);
+      } catch (hlErr: any) {
+        console.warn('⚠️ [live] Erro Hyperliquid portfolio:', hlErr?.message);
+      }
+    }
 
     const valid = results
       .filter(r => r.status === 'fulfilled' && r.value !== null)

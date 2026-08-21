@@ -13,6 +13,7 @@
     "@coral-xyz/anchor": "^0.32.1",
     "@google/genai": "^2.15.0",
     "@kamino-finance/klend-sdk": "^9.1.5",
+    "@nktkas/hyperliquid": "^0.33.3",
     "@solana/spl-token": "^0.4.15",
     "@solana/web3.js": "^1.98.4",
     "axios": "^1.18.1",
