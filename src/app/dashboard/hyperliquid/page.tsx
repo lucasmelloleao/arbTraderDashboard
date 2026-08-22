@@ -197,6 +197,7 @@ export default function HyperliquidPage() {
       minVolume24hUSD: settings?.minVolume24hUSD ?? 500000,
       maxStrategiesPerScan: settings?.maxStrategiesPerScan ?? 5,
       maxDailyLoss: settings?.maxDailyLoss ?? 10,
+      maxPortfolioCapUSD: settings?.maxPortfolioCapUSD ?? 500,
       takeProfitPricePct: settings?.takeProfitPricePct ?? 3,
       trailingStopPct: settings?.trailingStopPct ?? 1.5,
     });
@@ -213,6 +214,7 @@ export default function HyperliquidPage() {
           minVolume24hUSD: Number(form.minVolume24hUSD),
           maxStrategiesPerScan: Number(form.maxStrategiesPerScan),
           maxDailyLoss: Number(form.maxDailyLoss),
+          maxPortfolioCapUSD: Number(form.maxPortfolioCapUSD),
           takeProfitPricePct: Number(form.takeProfitPricePct),
           trailingStopPct: Number(form.trailingStopPct),
         }),
@@ -315,6 +317,7 @@ export default function HyperliquidPage() {
   const filteredTrades = useMemo(() => {
     const q = tradeSearch.trim().toLowerCase();
     return trades.filter((t) => {
+      if (t.status === 'failed') return false; // Oculta trades falhados
       if (tradeFilter !== 'all' && t.type !== tradeFilter) return false;
       if (!q) return true;
       return [t.strategyName, t.perpSymbol, t.spotSymbol, t.reason, t.status]
@@ -472,12 +475,20 @@ export default function HyperliquidPage() {
               <input type="number" min="1" value={settingsForm.maxStrategiesPerScan} onChange={(e) => setSettingsForm({ ...settingsForm, maxStrategiesPerScan: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
             )}
           </div>
-          <div className="sm:col-span-5 border-t border-white/10 pt-3">
+          <div>
             <span className="block text-xs text-slate-500 mb-1">Max Perda Diária (USDC)</span>
             {!isEditingSettings ? (
               <span className="font-bold text-white">${settings?.maxDailyLoss ?? 10}</span>
             ) : (
               <input type="number" value={settingsForm.maxDailyLoss} onChange={(e) => setSettingsForm({ ...settingsForm, maxDailyLoss: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
+            )}
+          </div>
+          <div>
+            <span className="block text-xs text-slate-500 mb-1">Limite Máx Carteira (USDC)</span>
+            {!isEditingSettings ? (
+              <span className="font-bold text-indigo-300">${settings?.maxPortfolioCapUSD ?? 500}</span>
+            ) : (
+              <input type="number" value={settingsForm.maxPortfolioCapUSD} onChange={(e) => setSettingsForm({ ...settingsForm, maxPortfolioCapUSD: Number(e.target.value) })} className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white" />
             )}
           </div>
           <div>
@@ -531,37 +542,156 @@ export default function HyperliquidPage() {
               </div>
             ) : (
               openOps.map((t) => {
-                const s = strategies.find((st) => st.name === t.strategyName || st.perpSymbol === t.perpSymbol);
+                const s = strategies.find((st) => st.name === t.strategyName || st.perpSymbol === t.perpSymbol || st._id === t.strategyId);
+                const amount = Number(t.amount || s?.positionSize || s?.tradeSize || 0);
+                const entryPerp = Number(t.perpPrice || s?.lastPerpPrice || 0);
+                const entrySpot = Number(t.spotPrice || s?.lastSpotPrice || 0);
+                
+                const livePerp = Number(s?.lastPerpPrice || entryPerp);
+                const liveSpot = Number(s?.lastSpotPrice || entrySpot);
+                
+                const perpUnits = entryPerp > 0 ? amount / entryPerp : 0;
+                const spotUnits = entrySpot > 0 ? amount / entrySpot : 0;
+                
+                const perpPnl = perpUnits > 0 && livePerp > 0 ? (entryPerp - livePerp) * perpUnits : 0;
+                const spotPnl = spotUnits > 0 && liveSpot > 0 ? (liveSpot - entrySpot) * spotUnits : 0;
+                const marketPnl = perpPnl + spotPnl;
+                
+                const fundingCollected = Number(s?.fundingCollected || 0);
+                const totalUnrealizedPnl = marketPnl + fundingCollected;
+                const estExitValue = amount + totalUnrealizedPnl;
+                const pnlPct = amount > 0 ? (totalUnrealizedPnl / amount) * 100 : 0;
+
+                const elapsedMs = Math.max(0, Date.now() - new Date(t.createdAt).getTime());
+                const elapsedMin = Math.floor(elapsedMs / 60000);
+                const elapsedHours = Math.floor(elapsedMin / 60);
+                const elapsedStr = elapsedHours > 0 ? `${elapsedHours}h ${elapsedMin % 60}m` : `${elapsedMin}m`;
+
                 return (
-                  <div key={t._id} className="rounded-xl border border-emerald-500/30 bg-slate-900 p-5 flex flex-col justify-between shadow-lg">
+                  <div key={t._id} className="rounded-xl border border-emerald-500/30 bg-slate-950 p-5 flex flex-col justify-between shadow-xl">
                     <div>
+                      {/* Header com símbolo e status */}
                       <div className="flex items-center justify-between border-b border-white/5 pb-3">
                         <div>
-                          <h3 className="text-base font-extrabold text-white">{t.strategyName || t.perpSymbol || 'Operação'}</h3>
-                          <div className="text-xs text-slate-500 font-mono">{t.perpSymbol || '—'}</div>
+                          <div className="text-base font-bold text-white flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                            {t.strategyName || t.perpSymbol || 'Operação'}
+                          </div>
+                          <div className="text-xs text-slate-500 font-mono mt-0.5">{t.perpSymbol || '—'} / {t.spotSymbol || '—'} ({s?.hedgeVenue === 'mexc' ? 'Cross MEXC' : 'Spot HL'})</div>
                         </div>
-                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 text-xs font-bold text-emerald-300">
-                          ● ABERTA
+                        <span className="rounded-md bg-indigo-500/20 px-2.5 py-1 text-xs font-bold text-indigo-300 border border-indigo-500/30">
+                          ⏱️ Aberto há {elapsedStr}
                         </span>
                       </div>
+
+                      {/* BLOCAÇO DE DESTAQUE: Valor de Entrada vs Valor Atual */}
                       <div className="mt-4 grid grid-cols-2 gap-3">
-                        <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3.5">
+                        <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3.5 flex flex-col justify-between">
                           <span className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">💵 Valor de Entrada</span>
-                          <div className="mt-1 text-xl sm:text-2xl font-black text-white">${Number(t.amount || 0).toFixed(2)} <span className="text-xs font-normal text-slate-400">USDC</span></div>
-                          <span className="text-[11px] text-slate-400 font-mono mt-1 block">preço {fmtPrice(t.perpPrice)}</span>
+                          <div className="mt-1 text-xl sm:text-2xl font-black text-white">${amount.toFixed(2)} <span className="text-xs font-normal text-slate-400">USDC</span></div>
+                          <span className="text-[11px] text-slate-400 font-mono mt-1">preço {fmtPrice(entryPerp)}</span>
                         </div>
-                        <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3.5">
-                          <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">⏳ Em aberto desde</span>
-                          <div className="mt-1 text-sm font-bold text-white">{new Date(t.createdAt).toLocaleString('pt-BR')}</div>
-                          <span className="text-[11px] text-slate-400 mt-1 block">funding {t.fundingRate !== undefined && t.fundingRate !== null ? `${(t.fundingRate * 100).toFixed(4)}%` : '—'}</span>
+
+                        <div className={`rounded-xl border p-3.5 flex flex-col justify-between ${totalUnrealizedPnl >= 0 ? 'border-emerald-500/40 bg-emerald-950/25' : 'border-red-500/40 bg-red-950/25'}`}>
+                          <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">🏁 Valor Estimado Saída</span>
+                          <div className="mt-1 text-xl sm:text-2xl font-black text-white">${estExitValue.toFixed(2)} <span className="text-xs font-normal text-slate-400">USDC</span></div>
+                          <div className={`text-xs font-extrabold mt-1 ${totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {fmtSigned(totalUnrealizedPnl)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+                          </div>
                         </div>
                       </div>
+
+                      {/* Decomposição Explícita por Perna */}
+                      <div className="mt-3 space-y-2 rounded-lg bg-slate-900/90 border border-white/10 p-3 text-xs">
+                        <div className="font-semibold text-slate-200 border-b border-white/10 pb-1.5 flex justify-between items-center">
+                          <span>📊 Decomposição por Perna (Delta Neutro)</span>
+                          <span className="text-[10px] text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30">1X Hedge</span>
+                        </div>
+
+                        {/* Perna 1: Spot */}
+                        <div className="p-2 rounded bg-slate-950/60 border border-emerald-500/20 flex items-center justify-between">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 w-max">
+                              SPOT COMPRADO ({s?.hedgeVenue === 'mexc' ? 'MEXC' : 'HL'})
+                            </span>
+                            <span className="text-slate-400 font-mono text-[11px]">${fmtPrice(entrySpot)} → ${fmtPrice(liveSpot)}</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] text-slate-400">PnL Spot</div>
+                            <div className={`font-mono font-bold ${spotPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtSigned(spotPnl)}</div>
+                          </div>
+                        </div>
+
+                        {/* Perna 2: Perp */}
+                        <div className="p-2 rounded bg-slate-950/60 border border-purple-500/20 flex items-center justify-between">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 w-max">
+                              PERPÉTUO SHORT (Hyperliquid)
+                            </span>
+                            <span className="text-slate-400 font-mono text-[11px]">${fmtPrice(entryPerp)} → ${fmtPrice(livePerp)}</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] text-slate-400">PnL Futuro</div>
+                            <div className={`font-mono font-bold ${perpPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmtSigned(perpPnl)}</div>
+                          </div>
+                        </div>
+
+                        {/* Funding Coletado com Clique Interativo / Extrato */}
+                        {(() => {
+                          const stratFundingTrades = trades.filter(tr => tr.type === 'funding' && (tr.perpSymbol === t.perpSymbol || tr.strategyName === t.strategyName));
+                          const historyList = (s?.fundingHistory && s.fundingHistory.length > 0)
+                            ? s.fundingHistory
+                            : stratFundingTrades.map(tr => ({ amount: tr.amount || tr.realizedPnl, timestamp: tr.createdAt }));
+
+                          return (
+                            <div className="group relative p-2 rounded bg-cyan-950/30 border border-cyan-500/30 flex items-center justify-between font-mono cursor-pointer hover:bg-cyan-900/40 transition-colors">
+                              <span className="text-cyan-200 text-[11px] font-sans">🌾 Funding Coletado ({historyList.length || s?.fundingCount || 0} colheitas):</span>
+                              <span className="font-bold text-cyan-300">+${fundingCollected.toFixed(4)} USDC</span>
+
+                              {/* Tooltip com extrato de colheitas ao passar o mouse ou focar */}
+                              <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-72 rounded-lg bg-slate-950 border border-cyan-500/40 p-3 shadow-2xl z-50 text-[11px] backdrop-blur-md">
+                                <div className="font-semibold text-cyan-300 mb-1.5 border-b border-white/10 pb-1 flex justify-between">
+                                  <span>🌾 Extrato de Colheitas ({historyList.length})</span>
+                                  <span>Valor</span>
+                                </div>
+                                {historyList.length === 0 ? (
+                                  <div className="text-[10px] text-slate-400 py-1">Nenhum pagamento registrado ainda.</div>
+                                ) : (
+                                  <div className="max-h-44 overflow-y-auto space-y-1 pr-1 custom-scrollbar font-mono">
+                                    {historyList.map((item: any, idx: number) => {
+                                      const dateStr = item.timestamp
+                                        ? new Date(item.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                        : `Colheita #${idx + 1}`;
+                                      return (
+                                        <div key={idx} className="flex justify-between items-center text-slate-300 text-[10px]">
+                                          <span className="text-slate-400">{dateStr}</span>
+                                          <span className="text-emerald-400 font-bold">
+                                            +${Number(item.amount || item.pnl || 0).toFixed(4)} USDC
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Footer com datas */}
+                      <div className="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-white/5 pt-2 font-mono">
+                        <span>🚀 Entrada: {new Date(t.createdAt).toLocaleString('pt-BR')}</span>
+                        <span className="text-emerald-400 font-bold">Funding: {s?.fundingRate ? `${(s.fundingRate * 100).toFixed(4)}%/h` : '—'}</span>
+                      </div>
                     </div>
-                    {s?.positionOpen && (
-                      <button onClick={() => closeStrategy(s._id)} className="mt-4 bg-red-500/20 hover:bg-red-500/30 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 justify-center">
-                        <XCircle className="w-3.5 h-3.5" /> Encerrar
-                      </button>
-                    )}
+
+                    <button 
+                      onClick={() => closeStrategy(s?._id || t.strategyId)} 
+                      className="mt-4 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 justify-center hover:scale-[1.02] cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4 text-red-400" /> Encerrar Posição Agora
+                    </button>
                   </div>
                 );
               })

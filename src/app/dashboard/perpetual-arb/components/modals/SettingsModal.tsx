@@ -50,7 +50,7 @@ export function SettingsModal({
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-7 text-sm">
+      <div className="grid gap-4 sm:grid-cols-8 text-sm">
         <div>
           <span className="block text-xs text-slate-500 mb-1">Colheita Automática</span>
           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold ${settings.isScanningEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}`}>
@@ -146,6 +146,20 @@ export function SettingsModal({
         </div>
 
         <div>
+          <span className="block text-xs text-slate-500 mb-1">Limite Máx Carteira (USDT)</span>
+          {!isEditingSettings ? (
+            <span className="font-bold text-indigo-300">${settings.maxPortfolioCapUSD ?? 500}</span>
+          ) : (
+            <input
+              type="number"
+              value={settingsForm.maxPortfolioCapUSD ?? 500}
+              onChange={e => onUpdateSettingsForm({ ...settingsForm, maxPortfolioCapUSD: Number(e.target.value) })}
+              className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white"
+            />
+          )}
+        </div>
+
+        <div>
           <span className="block text-xs text-slate-500 mb-1">Ciclo de Scan (Minutos)</span>
           {!isEditingSettings ? (
             <span className="font-bold text-white">{(settings.scanIntervalMs || 120000) / 60000}</span>
@@ -161,7 +175,7 @@ export function SettingsModal({
           )}
         </div>
         
-        <div className="sm:col-span-6 border-t border-white/10 pt-4 mt-2">
+        <div className="sm:col-span-8 border-t border-white/10 pt-4 mt-2">
           <span className="block text-xs text-slate-500 mb-2">Corretoras Pescadas</span>
           {!isEditingSettings ? (
             <div className="flex gap-2">

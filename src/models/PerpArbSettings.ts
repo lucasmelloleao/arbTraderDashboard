@@ -12,6 +12,7 @@ const PerpArbSettingsSchema = new mongoose.Schema({
   scanIntervalMs: { type: Number, default: 120000 },
   targetSpotBuyUSD: { type: Number, default: 1000 },
   maxDailyLoss: { type: Number, default: 10 },
+  maxPortfolioCapUSD: { type: Number, default: 500 }, // Limite máximo de exposição da carteira (USD)
   maxSlippagePct: { type: Number, default: 0.1 },
   minEntrySpreadPct: { type: Number, default: 0.0 },
   allowedExchanges: { type: [String], default: [] }
